@@ -4,7 +4,8 @@ Coze Workflow 集成服务
 import httpx
 import json
 import logging
-from typing import Optional, List, Dict, Any
+import asyncio
+from typing import Optional, List, Dict, Any, AsyncGenerator
 from app.config import settings
 
 # 配置日志 - 设置为 DEBUG 级别以显示详细信息
@@ -251,6 +252,24 @@ def _parse_coze_response(result: dict) -> dict:
     # 如果 data 是字典
     if isinstance(data, dict):
         print("   📌 处理字典类型的 data")
+
+        # Coze workflow 常见格式：{content_type:1, data:"<markdown>", ...}
+        if "data" in data:
+            inner_data = data.get("data")
+            if isinstance(inner_data, str):
+                print("   ✅ 发现 data 字段为字符串，直接作为报告使用")
+                print(f"      - 报告长度: {len(inner_data)} 字符")
+                return {
+                    "report": inner_data,
+                    "opportunities": data.get("opportunities", [])
+                }
+            if isinstance(inner_data, dict):
+                print("   ✅ 发现 data 字段为字典，尝试提取 report/opportunities")
+                return {
+                    "report": inner_data.get("report", inner_data.get("content", "")),
+                    "opportunities": inner_data.get("opportunities", [])
+                }
+
         # 检查是否有嵌套的 output 字段（某些 workflow 格式）
         if "output" in data and isinstance(data["output"], str):
             print("   🔄 发现嵌套的 output 字段，尝试解析...")
@@ -312,6 +331,195 @@ def _parse_coze_response(result: dict) -> dict:
         "report": str(data) if data else "",
         "opportunities": []
     }
+
+
+async def analyze_customer_kyc_stream(
+    kyc_data: dict,
+    related_contacts: Optional[List[dict]] = None
+) -> AsyncGenerator[str, None]:
+    """
+    调用 Coze Workflow API 进行智能分析 - 流式输出版本
+    
+    使用 SSE (Server-Sent Events) 格式返回流式数据
+    
+    Args:
+        kyc_data: KYC 表单数据
+        related_contacts: 关联人信息
+    
+    Yields:
+        SSE 格式的流式数据块
+    """
+    # 如果未配置 Coze API，返回模拟数据（流式）
+    if not settings.COZE_API_KEY or not settings.COZE_WORKFLOW_ID:
+        logger.info("未配置 Coze API，使用模拟流式数据")
+        mock_result = _generate_mock_analysis(kyc_data, related_contacts)
+        # 模拟流式输出
+        report = mock_result.get("report", "")
+        for i in range(0, len(report), 20):
+            chunk = report[i:i+20]
+            yield f"data: {json.dumps({'type': 'content', 'content': chunk}, ensure_ascii=False)}\n\n"
+            await asyncio.sleep(0.05)
+        # 发送完成事件
+        yield f"data: {json.dumps({'type': 'done', 'opportunities': mock_result.get('opportunities', [])}, ensure_ascii=False)}\n\n"
+        return
+    
+    # 构建请求数据
+    workflow_input = _build_workflow_input(kyc_data, related_contacts)
+    
+    # 流式 API 端点
+    request_url = f"{settings.COZE_API_BASE_URL}/workflow/stream_run"
+    request_body = {
+        "workflow_id": settings.COZE_WORKFLOW_ID,
+        "parameters": workflow_input
+    }
+    
+    print("\n" + "="*60)
+    print("🚀 [COZE API] 发送流式请求")
+    print("="*60)
+    print(f"📍 请求地址: {request_url}")
+    print(f"📋 Workflow ID: {settings.COZE_WORKFLOW_ID}")
+    print("-"*60)
+    
+    accumulated_content = ""
+    
+    try:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            async with client.stream(
+                "POST",
+                request_url,
+                headers={
+                    "Authorization": f"Bearer {settings.COZE_API_KEY}",
+                    "Content-Type": "application/json",
+                    "Accept": "text/event-stream"
+                },
+                json=request_body
+            ) as response:
+                print(f"📊 流式响应状态码: {response.status_code}")
+                
+                if response.status_code != 200:
+                    error_text = await response.aread()
+                    print(f"❌ 流式请求失败: {error_text.decode()}")
+                    yield f"data: {json.dumps({'type': 'error', 'message': f'API错误: {response.status_code}'}, ensure_ascii=False)}\n\n"
+                    return
+                
+                # 处理 SSE 流
+                buffer = ""
+                async for chunk in response.aiter_text():
+                    buffer += chunk
+                    
+                    # 按行处理 SSE 数据
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        
+                        if not line:
+                            continue
+                        
+                        # 处理 SSE 数据行
+                        if line.startswith("data:"):
+                            data_str = line[5:].strip()
+                            if not data_str or data_str == "[DONE]":
+                                continue
+                            
+                            try:
+                                data = json.loads(data_str)
+                                event_type = data.get("event", data.get("type", ""))
+                                
+                                print(f"📦 收到事件: {event_type}")
+                                
+                                # 处理不同类型的事件
+                                if event_type == "Message":
+                                    # Coze workflow 消息事件
+                                    message_data = data.get("data", data.get("message", {}))
+                                    if isinstance(message_data, str):
+                                        try:
+                                            message_data = json.loads(message_data)
+                                        except:
+                                            pass
+                                    
+                                    content = ""
+                                    if isinstance(message_data, dict):
+                                        content = message_data.get("content", message_data.get("data", ""))
+                                    elif isinstance(message_data, str):
+                                        content = message_data
+                                    
+                                    if content:
+                                        accumulated_content += content
+                                        yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                                
+                                elif event_type in ["Output", "output"]:
+                                    # 输出节点数据
+                                    output_data = data.get("data", data.get("output", ""))
+                                    if isinstance(output_data, str):
+                                        try:
+                                            output_data = json.loads(output_data)
+                                        except:
+                                            pass
+                                    
+                                    content = ""
+                                    if isinstance(output_data, dict):
+                                        content = output_data.get("data", output_data.get("content", output_data.get("output", "")))
+                                    elif isinstance(output_data, str):
+                                        content = output_data
+                                    
+                                    if content:
+                                        accumulated_content += content
+                                        yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                                
+                                elif event_type in ["Done", "done", "Completed", "completed"]:
+                                    # 完成事件
+                                    print("✅ 流式输出完成")
+                                    yield f"data: {json.dumps({'type': 'done', 'opportunities': []}, ensure_ascii=False)}\n\n"
+                                
+                                elif event_type in ["Error", "error"]:
+                                    # 错误事件
+                                    error_msg = data.get("message", data.get("error", "未知错误"))
+                                    print(f"❌ 错误事件: {error_msg}")
+                                    yield f"data: {json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False)}\n\n"
+                                
+                                else:
+                                    # 其他事件，尝试提取内容
+                                    content = data.get("content", data.get("data", ""))
+                                    if isinstance(content, str) and content:
+                                        accumulated_content += content
+                                        yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                            
+                            except json.JSONDecodeError as e:
+                                print(f"⚠️ JSON 解析失败: {data_str[:100]}...")
+                                # 直接作为文本内容输出
+                                if data_str and data_str != "[DONE]":
+                                    accumulated_content += data_str
+                                    yield f"data: {json.dumps({'type': 'content', 'content': data_str}, ensure_ascii=False)}\n\n"
+                        
+                        elif line.startswith("event:"):
+                            # 事件类型行，忽略
+                            pass
+                
+                # 处理剩余的 buffer
+                if buffer.strip():
+                    if buffer.strip().startswith("data:"):
+                        data_str = buffer.strip()[5:].strip()
+                        if data_str and data_str != "[DONE]":
+                            try:
+                                data = json.loads(data_str)
+                                content = data.get("content", data.get("data", ""))
+                                if content:
+                                    accumulated_content += content
+                                    yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                            except:
+                                accumulated_content += data_str
+                                yield f"data: {json.dumps({'type': 'content', 'content': data_str}, ensure_ascii=False)}\n\n"
+                
+                # 发送最终完成事件
+                print(f"📝 总共接收内容长度: {len(accumulated_content)} 字符")
+                yield f"data: {json.dumps({'type': 'done', 'full_content': accumulated_content, 'opportunities': []}, ensure_ascii=False)}\n\n"
+                
+    except httpx.TimeoutException as e:
+        print(f"❌ 流式请求超时: {str(e)}")
+        yield f"data: {json.dumps({'type': 'error', 'message': '请求超时'}, ensure_ascii=False)}\n\n"
+    except Exception as e:
+        print(f"❌ 流式请求异常: {type(e).__name__}: {str(e)}")
+        yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
 
 
 def _generate_mock_analysis(
