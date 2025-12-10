@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- 页面标题 -->
+    <div class="col-12 mb-4">
+        <h2><i class="bi bi-gear"></i> 表单设置</h2>
+        <p class="text-muted">配置 KYC 表单的字段和选项</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">表单配置</h5>
+                <span class="badge bg-primary">版本 {{ form_template.version if form_template else '-' }}</span>
+            </div>
+            <div class="card-body">
+                {% if form_template and form_template.schema %}
+                <div id="formPreview">
+                    {% for section in form_template.schema.sections %}
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">{{ section.title }}</h6>
+                                <span class="badge bg-secondary">{{ section.fields | length }} 个字段</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>字段名</th>
+                                        <th>标签</th>
+                                        <th>类型</th>
+                                        <th>必填</th>
+                                        <th>选项</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for field in section.fields %}
+                                    <tr>
+                                        <td><code>{{ field.name }}</code></td>
+                                        <td>{{ field.label }}</td>
+                                        <td>
+                                            <span class="badge bg-{{ 'primary' if field.type == 'text' else 'info' if field.type == 'select' else 'success' if field.type == 'multiselect' else 'warning' if field.type == 'number' else 'secondary' }}">
+                                                {{ field.type }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if field.required %}
+                                            <i class="bi bi-check-circle text-success"></i>
+                                            {% else %}
+                                            <i class="bi bi-circle text-muted"></i>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if field.options %}
+                                            <small class="text-muted">{{ field.options | length }} 个选项</small>
+                                            {% else %}
+                                            -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-4">未找到表单配置</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4">
+        <!-- JSON 编辑器 -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-code-slash"></i> JSON 编辑器</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small">
+                    高级用户可直接编辑 JSON 配置来修改表单结构。
+                </p>
+                <button class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#jsonEditorModal">
+                    <i class="bi bi-pencil-square"></i> 编辑 JSON
+                </button>
+            </div>
+        </div>
+        
+        <!-- 操作说明 -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-info-circle"></i> 说明</h5>
+            </div>
+            <div class="card-body">
+                <h6>字段类型说明</h6>
+                <ul class="small">
+                    <li><code>text</code> - 单行文本输入</li>
+                    <li><code>textarea</code> - 多行文本输入</li>
+                    <li><code>number</code> - 数字输入</li>
+                    <li><code>select</code> - 单选下拉框</li>
+                    <li><code>multiselect</code> - 多选复选框</li>
+                </ul>
+                
+                <h6>注意事项</h6>
+                <ul class="small text-muted">
+                    <li>修改字段名会影响已有数据的显示</li>
+                    <li>建议仅修改选项内容和标签</li>
+                    <li>修改后请刷新页面查看效果</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JSON 编辑器模态框 -->
+<div class="modal fade" id="jsonEditorModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑表单配置 (JSON)</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <textarea class="form-control font-monospace" id="jsonEditor" rows="20" style="font-size: 12px;">{{ form_template.schema | tojson(indent=2) if form_template else '{}' }}</textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" id="formatJson">格式化</button>
+                <button type="button" class="btn btn-primary" id="saveJson">保存配置</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const formId = {{ form_template.id if form_template else 'null' }};
+
+// 格式化 JSON
+document.getElementById('formatJson').addEventListener('click', function() {
+    const editor = document.getElementById('jsonEditor');
+    try {
+        const json = JSON.parse(editor.value);
+        editor.value = JSON.stringify(json, null, 2);
+    } catch (e) {
+        alert('JSON 格式错误: ' + e.message);
+    }
+});
+
+// 保存 JSON 配置
+document.getElementById('saveJson').addEventListener('click', async function() {
+    const editor = document.getElementById('jsonEditor');
+    
+    try {
+        const schema = JSON.parse(editor.value);
+        
+        const response = await fetch(`/api/forms/${formId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ schema: schema })
+        });
+        
+        if (response.ok) {
+            alert('配置已保存');
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            alert('保存失败: ' + (error.detail || '未知错误'));
+        }
+    } catch (e) {
+        alert('JSON 格式错误: ' + e.message);
+    }
+});
+</script>
+{% endblock %}
+

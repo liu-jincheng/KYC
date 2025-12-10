@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- 页面标题和操作 -->
+    <div class="col-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="bi bi-people"></i> 客户列表</h2>
+                <p class="text-muted mb-0">共 {{ customers|length }} 位客户</p>
+            </div>
+            <a href="/customers/new" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> 新建客户
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- 状态筛选 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="btn-group" role="group">
+            <a href="/customers" class="btn {{ 'btn-primary' if not current_status else 'btn-outline-primary' }}">
+                全部
+            </a>
+            {% for status in statuses %}
+            <a href="/customers?status={{ status }}" 
+               class="btn {{ 'btn-primary' if current_status == status else 'btn-outline-primary' }}">
+                {{ status }}
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- 客户列表 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body p-0">
+                {% if customers %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>姓名</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>下次跟进</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for customer in customers %}
+                            <tr>
+                                <td>{{ customer.id }}</td>
+                                <td>
+                                    <a href="/customers/{{ customer.id }}" class="text-decoration-none fw-bold">
+                                        {{ customer.name }}
+                                    </a>
+                                </td>
+                                <td>
+                                    <span class="badge {{ 'bg-warning text-dark' if customer.status == '待录入' else 'bg-info' if customer.status == 'AI分析中' else 'bg-primary' if customer.status == '已出方案' else 'bg-secondary' if customer.status == '跟进中' else 'bg-success' }}">
+                                        {{ customer.status }}
+                                    </span>
+                                </td>
+                                <td>{{ customer.created_at.strftime('%Y-%m-%d %H:%M') if customer.created_at else '-' }}</td>
+                                <td>{{ customer.next_follow_up.strftime('%Y-%m-%d') if customer.next_follow_up else '-' }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="/customers/{{ customer.id }}" class="btn btn-outline-primary" title="查看详情">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline-secondary" title="编辑">
+                                            <i class="bi bi-pencil"></i>
+                                        </a>
+                                        {% if customer.status == '待录入' or customer.status == '跟进中' %}
+                                        <button class="btn btn-outline-info btn-analyze" 
+                                                data-customer-id="{{ customer.id }}" 
+                                                title="AI分析">
+                                            <i class="bi bi-robot"></i>
+                                        </button>
+                                        {% endif %}
+                                        <button class="btn btn-outline-danger btn-delete" 
+                                                data-customer-id="{{ customer.id }}"
+                                                data-customer-name="{{ customer.name }}"
+                                                title="删除">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox fs-1 text-muted"></i>
+                    <p class="text-muted mt-3">暂无客户数据</p>
+                    <a href="/customers/new" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i> 添加第一位客户
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认模态框 -->
+<div class="modal fade" id="deleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要删除客户 <strong id="deleteCustomerName"></strong> 吗？</p>
+                <p class="text-danger small">此操作不可撤销！</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmDelete">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let deleteCustomerId = null;
+
+// 删除按钮点击
+document.querySelectorAll('.btn-delete').forEach(btn => {
+    btn.addEventListener('click', function() {
+        deleteCustomerId = this.dataset.customerId;
+        document.getElementById('deleteCustomerName').textContent = this.dataset.customerName;
+        new bootstrap.Modal(document.getElementById('deleteModal')).show();
+    });
+});
+
+// 确认删除
+document.getElementById('confirmDelete').addEventListener('click', async function() {
+    if (!deleteCustomerId) return;
+    
+    try {
+        const response = await fetch(`/api/customers/${deleteCustomerId}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            alert('删除失败');
+        }
+    } catch (error) {
+        console.error('删除失败:', error);
+        alert('删除失败');
+    }
+});
+
+// AI分析按钮
+document.querySelectorAll('.btn-analyze').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const customerId = this.dataset.customerId;
+        const button = this;
+        
+        button.disabled = true;
+        button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        
+        try {
+            const response = await fetch(`/api/analyze/${customerId}`, {
+                method: 'POST'
+            });
+            
+            if (response.ok) {
+                window.location.href = `/customers/${customerId}`;
+            } else {
+                const data = await response.json();
+                alert(data.detail || 'AI分析失败');
+                button.disabled = false;
+                button.innerHTML = '<i class="bi bi-robot"></i>';
+            }
+        } catch (error) {
+            console.error('分析失败:', error);
+            alert('AI分析失败');
+            button.disabled = false;
+            button.innerHTML = '<i class="bi bi-robot"></i>';
+        }
+    });
+});
+</script>
+{% endblock %}
+

@@ -1,0 +1,374 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- 页面标题 -->
+    <div class="col-12 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">首页</a></li>
+                <li class="breadcrumb-item"><a href="/customers">客户列表</a></li>
+                <li class="breadcrumb-item active">{{ '编辑客户' if customer else '新建客户' }}</li>
+            </ol>
+        </nav>
+        <h2>
+            <i class="bi bi-{{ 'pencil' if customer else 'person-plus' }}"></i> 
+            {{ '编辑客户 - ' + customer.name if customer else '新建客户' }}
+        </h2>
+    </div>
+</div>
+
+<form id="customerForm" class="needs-validation" novalidate>
+    <div class="row">
+        <div class="col-lg-8">
+            {% if form_schema and form_schema.sections %}
+            {% for section in form_schema.sections %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">{{ section.title }}</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for field in section.fields %}
+                        <div class="col-md-{{ 12 if field.type == 'textarea' else 6 }} mb-3">
+                            <label for="{{ field.name }}" class="form-label">
+                                {{ field.label }}
+                                {% if field.required %}<span class="text-danger">*</span>{% endif %}
+                            </label>
+                            
+                            {% if field.type == 'text' %}
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="{{ field.name }}" 
+                                   name="{{ field.name }}"
+                                   value="{{ customer.kyc_data[field.name] if customer and customer.kyc_data and field.name in customer.kyc_data else '' }}"
+                                   {% if field.required %}required{% endif %}>
+                            
+                            {% elif field.type == 'number' %}
+                            <input type="number" 
+                                   class="form-control" 
+                                   id="{{ field.name }}" 
+                                   name="{{ field.name }}"
+                                   value="{{ customer.kyc_data[field.name] if customer and customer.kyc_data and field.name in customer.kyc_data else '' }}"
+                                   min="0"
+                                   {% if field.required %}required{% endif %}>
+                            
+                            {% elif field.type == 'select' %}
+                            <select class="form-select" 
+                                    id="{{ field.name }}" 
+                                    name="{{ field.name }}"
+                                    {% if field.required %}required{% endif %}>
+                                <option value="">请选择...</option>
+                                {% for option in field.options %}
+                                <option value="{{ option }}" 
+                                    {% if customer and customer.kyc_data and customer.kyc_data.get(field.name) == option %}selected{% endif %}>
+                                    {{ option }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            
+                            {% elif field.type == 'multiselect' %}
+                            <div class="multiselect-container border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                {% set selected_values = customer.kyc_data.get(field.name, []) if customer and customer.kyc_data else [] %}
+                                {% for option in field.options %}
+                                <div class="form-check">
+                                    <input class="form-check-input multiselect-checkbox" 
+                                           type="checkbox" 
+                                           id="{{ field.name }}_{{ loop.index }}"
+                                           name="{{ field.name }}"
+                                           value="{{ option }}"
+                                           data-max="{{ field.max if field.max else 0 }}"
+                                           data-field="{{ field.name }}"
+                                           {% if option in selected_values %}checked{% endif %}>
+                                    <label class="form-check-label" for="{{ field.name }}_{{ loop.index }}">
+                                        {{ option }}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% if field.max %}
+                            <small class="text-muted">最多选择 {{ field.max }} 项</small>
+                            {% endif %}
+                            
+                            {% elif field.type == 'textarea' %}
+                            <textarea class="form-control" 
+                                      id="{{ field.name }}" 
+                                      name="{{ field.name }}"
+                                      rows="3"
+                                      {% if field.required %}required{% endif %}>{{ customer.kyc_data[field.name] if customer and customer.kyc_data and field.name in customer.kyc_data else '' }}</textarea>
+                            
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i> 未找到表单配置，请先在设置页面配置表单。
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- 侧边栏 -->
+        <div class="col-lg-4">
+            <!-- 关联人信息 -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">关联人信息</h5>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="addContact">
+                        <i class="bi bi-plus"></i> 添加
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="contactsList">
+                        {% if customer and customer.related_contacts %}
+                        {% for contact in customer.related_contacts %}
+                        <div class="contact-item border rounded p-2 mb-2">
+                            <div class="d-flex justify-content-between">
+                                <div>
+                                    <input type="text" class="form-control form-control-sm mb-1 contact-name" 
+                                           placeholder="姓名" value="{{ contact.name }}">
+                                    <select class="form-select form-select-sm mb-1 contact-relation">
+                                        <option value="">关系...</option>
+                                        <option value="配偶" {% if contact.relation == '配偶' %}selected{% endif %}>配偶</option>
+                                        <option value="子女" {% if contact.relation == '子女' %}selected{% endif %}>子女</option>
+                                        <option value="父母" {% if contact.relation == '父母' %}selected{% endif %}>父母</option>
+                                        <option value="朋友" {% if contact.relation == '朋友' %}selected{% endif %}>朋友</option>
+                                        <option value="同事" {% if contact.relation == '同事' %}selected{% endif %}>同事</option>
+                                        <option value="其他" {% if contact.relation == '其他' %}selected{% endif %}>其他</option>
+                                    </select>
+                                    <input type="text" class="form-control form-control-sm contact-note" 
+                                           placeholder="备注" value="{{ contact.note or '' }}">
+                                </div>
+                                <button type="button" class="btn btn-sm btn-link text-danger remove-contact">
+                                    <i class="bi bi-x"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                    <p class="text-muted small mb-0">记录配偶、子女、朋友等关联人，用于商机挖掘</p>
+                </div>
+            </div>
+            
+            <!-- 跟进设置 -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">跟进设置</h5>
+                </div>
+                <div class="card-body">
+                    <label for="next_follow_up" class="form-label">下次跟进日期</label>
+                    <input type="date" class="form-control" id="next_follow_up" name="next_follow_up"
+                           value="{{ customer.next_follow_up.strftime('%Y-%m-%d') if customer and customer.next_follow_up else '' }}">
+                </div>
+            </div>
+            
+            <!-- 提交按钮 -->
+            <div class="card">
+                <div class="card-body">
+                    <button type="submit" class="btn btn-primary w-100 mb-2" id="saveBtn">
+                        <i class="bi bi-check-circle"></i> 保存
+                    </button>
+                    {% if customer %}
+                    <button type="button" class="btn btn-info w-100 mb-2" id="analyzeBtn">
+                        <i class="bi bi-robot"></i> AI 分析
+                    </button>
+                    {% endif %}
+                    <a href="{{ '/customers/' + customer.id|string if customer else '/customers' }}" class="btn btn-outline-secondary w-100">
+                        取消
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- 关联人模板 -->
+<template id="contactTemplate">
+    <div class="contact-item border rounded p-2 mb-2">
+        <div class="d-flex justify-content-between">
+            <div class="flex-grow-1 me-2">
+                <input type="text" class="form-control form-control-sm mb-1 contact-name" placeholder="姓名">
+                <select class="form-select form-select-sm mb-1 contact-relation">
+                    <option value="">关系...</option>
+                    <option value="配偶">配偶</option>
+                    <option value="子女">子女</option>
+                    <option value="父母">父母</option>
+                    <option value="朋友">朋友</option>
+                    <option value="同事">同事</option>
+                    <option value="其他">其他</option>
+                </select>
+                <input type="text" class="form-control form-control-sm contact-note" placeholder="备注">
+            </div>
+            <button type="button" class="btn btn-sm btn-link text-danger remove-contact">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const customerId = {{ customer.id if customer else 'null' }};
+
+// 添加关联人
+document.getElementById('addContact').addEventListener('click', function() {
+    const template = document.getElementById('contactTemplate');
+    const clone = template.content.cloneNode(true);
+    document.getElementById('contactsList').appendChild(clone);
+    bindRemoveButtons();
+});
+
+// 删除关联人
+function bindRemoveButtons() {
+    document.querySelectorAll('.remove-contact').forEach(btn => {
+        btn.onclick = function() {
+            this.closest('.contact-item').remove();
+        };
+    });
+}
+bindRemoveButtons();
+
+// 多选限制
+document.querySelectorAll('.multiselect-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+        const max = parseInt(this.dataset.max);
+        if (max > 0) {
+            const fieldName = this.dataset.field;
+            const checked = document.querySelectorAll(`input[name="${fieldName}"]:checked`);
+            if (checked.length > max) {
+                this.checked = false;
+                alert(`最多只能选择 ${max} 项`);
+            }
+        }
+    });
+});
+
+// 收集表单数据
+function collectFormData() {
+    const formData = {
+        kyc_data: {},
+        related_contacts: [],
+        next_follow_up: null
+    };
+    
+    // 收集 KYC 数据
+    const form = document.getElementById('customerForm');
+    
+    // 文本、数字、选择框
+    form.querySelectorAll('input[type="text"], input[type="number"], select:not(.contact-relation), textarea').forEach(input => {
+        if (input.name && !input.name.startsWith('contact')) {
+            if (input.type === 'number') {
+                formData.kyc_data[input.name] = input.value ? parseInt(input.value) : null;
+            } else if (input.tagName === 'SELECT') {
+                formData.kyc_data[input.name] = input.value || null;
+            } else {
+                formData.kyc_data[input.name] = input.value || null;
+            }
+        }
+    });
+    
+    // 多选框
+    const multiselectFields = {};
+    form.querySelectorAll('.multiselect-checkbox:checked').forEach(checkbox => {
+        const fieldName = checkbox.name;
+        if (!multiselectFields[fieldName]) {
+            multiselectFields[fieldName] = [];
+        }
+        multiselectFields[fieldName].push(checkbox.value);
+    });
+    Object.assign(formData.kyc_data, multiselectFields);
+    
+    // 客户姓名特殊处理
+    formData.name = formData.kyc_data.name || '未命名客户';
+    
+    // 关联人
+    document.querySelectorAll('.contact-item').forEach(item => {
+        const name = item.querySelector('.contact-name').value;
+        const relation = item.querySelector('.contact-relation').value;
+        const note = item.querySelector('.contact-note').value;
+        
+        if (name) {
+            formData.related_contacts.push({ name, relation, note });
+        }
+    });
+    
+    // 下次跟进日期
+    const followUpDate = document.getElementById('next_follow_up').value;
+    formData.next_follow_up = followUpDate || null;
+    
+    return formData;
+}
+
+// 表单提交
+document.getElementById('customerForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const saveBtn = document.getElementById('saveBtn');
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 保存中...';
+    
+    const formData = collectFormData();
+    
+    try {
+        const url = customerId ? `/api/customers/${customerId}` : '/api/customers';
+        const method = customerId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            window.location.href = `/customers/${data.id}`;
+        } else {
+            const error = await response.json();
+            alert(error.detail || '保存失败');
+        }
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> 保存';
+    }
+});
+
+// AI 分析按钮
+{% if customer %}
+document.getElementById('analyzeBtn').addEventListener('click', async function() {
+    const btn = this;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 分析中...';
+    
+    try {
+        const response = await fetch(`/api/analyze/${customerId}`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            window.location.href = `/customers/${customerId}`;
+        } else {
+            const error = await response.json();
+            alert(error.detail || 'AI分析失败');
+        }
+    } catch (error) {
+        console.error('分析失败:', error);
+        alert('AI分析失败');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-robot"></i> AI 分析';
+    }
+});
+{% endif %}
+</script>
+{% endblock %}
+

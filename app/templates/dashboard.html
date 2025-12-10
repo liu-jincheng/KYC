@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- 页面标题 -->
+    <div class="col-12 mb-4">
+        <h2><i class="bi bi-speedometer2"></i> 仪表盘</h2>
+        <p class="text-muted">欢迎回来！这是您的客户管理概览。</p>
+    </div>
+</div>
+
+<!-- 统计卡片 -->
+<div class="row mb-4">
+    <div class="col-md-2 col-sm-4 col-6 mb-3">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <h3 class="card-title text-primary">{{ stats.total }}</h3>
+                <p class="card-text text-muted">总客户数</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-6 mb-3">
+        <div class="card text-center h-100 border-warning">
+            <div class="card-body">
+                <h3 class="card-title text-warning">{{ stats.pending }}</h3>
+                <p class="card-text text-muted">待录入</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-6 mb-3">
+        <div class="card text-center h-100 border-info">
+            <div class="card-body">
+                <h3 class="card-title text-info">{{ stats.analyzing }}</h3>
+                <p class="card-text text-muted">AI分析中</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-6 mb-3">
+        <div class="card text-center h-100 border-primary">
+            <div class="card-body">
+                <h3 class="card-title text-primary">{{ stats.reported }}</h3>
+                <p class="card-text text-muted">已出方案</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-6 mb-3">
+        <div class="card text-center h-100 border-secondary">
+            <div class="card-body">
+                <h3 class="card-title text-secondary">{{ stats.following }}</h3>
+                <p class="card-text text-muted">跟进中</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2 col-sm-4 col-6 mb-3">
+        <div class="card text-center h-100 border-success">
+            <div class="card-body">
+                <h3 class="card-title text-success">{{ stats.signed }}</h3>
+                <p class="card-text text-muted">已签约</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 待办提醒 -->
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-warning text-dark">
+                <i class="bi bi-bell"></i> 待办提醒
+            </div>
+            <div class="card-body" id="reminders-container">
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 生日祝福 -->
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-gift"></i> 生日祝福
+            </div>
+            <div class="card-body" id="birthdays-container">
+                <div class="text-center py-3">
+                    <div class="spinner-border spinner-border-sm" role="status">
+                        <span class="visually-hidden">加载中...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 最近客户 -->
+    <div class="col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-clock-history"></i> 最近添加
+            </div>
+            <div class="card-body">
+                {% if recent_customers %}
+                <ul class="list-group list-group-flush">
+                    {% for customer in recent_customers %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <a href="/customers/{{ customer.id }}" class="text-decoration-none">
+                            {{ customer.name }}
+                        </a>
+                        <span class="badge {{ 'bg-warning text-dark' if customer.status == '待录入' else 'bg-info' if customer.status == 'AI分析中' else 'bg-primary' if customer.status == '已出方案' else 'bg-secondary' if customer.status == '跟进中' else 'bg-success' }}">
+                            {{ customer.status }}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted text-center py-3">暂无客户数据</p>
+                {% endif %}
+            </div>
+            <div class="card-footer">
+                <a href="/customers" class="btn btn-sm btn-outline-primary w-100">查看全部</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 快速操作 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-lightning"></i> 快速操作
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3 col-sm-6">
+                        <a href="/customers/new" class="btn btn-primary w-100 py-3">
+                            <i class="bi bi-person-plus fs-4 d-block mb-2"></i>
+                            新建客户
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <a href="/customers?status=待录入" class="btn btn-warning w-100 py-3">
+                            <i class="bi bi-pencil-square fs-4 d-block mb-2"></i>
+                            待录入客户
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <a href="/customers?status=已出方案" class="btn btn-info w-100 py-3">
+                            <i class="bi bi-file-earmark-text fs-4 d-block mb-2"></i>
+                            查看方案
+                        </a>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <a href="/settings" class="btn btn-secondary w-100 py-3">
+                            <i class="bi bi-gear fs-4 d-block mb-2"></i>
+                            表单设置
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 加载提醒数据
+async function loadReminders() {
+    try {
+        const response = await fetch('/api/dashboard/reminders');
+        const data = await response.json();
+        
+        // 渲染跟进提醒
+        const remindersContainer = document.getElementById('reminders-container');
+        if (data.follow_ups.length > 0 || data.stale_analyses.length > 0) {
+            let html = '<ul class="list-group list-group-flush">';
+            
+            data.follow_ups.forEach(item => {
+                html += `
+                    <li class="list-group-item">
+                        <a href="/customers/${item.customer_id}" class="text-decoration-none">
+                            <strong>${item.customer_name}</strong>
+                        </a>
+                        <br><small class="text-muted">${item.message}</small>
+                    </li>
+                `;
+            });
+            
+            data.stale_analyses.forEach(item => {
+                html += `
+                    <li class="list-group-item list-group-item-warning">
+                        <a href="/customers/${item.customer_id}" class="text-decoration-none">
+                            <strong>${item.customer_name}</strong>
+                        </a>
+                        <br><small class="text-danger">${item.message}</small>
+                    </li>
+                `;
+            });
+            
+            html += '</ul>';
+            remindersContainer.innerHTML = html;
+        } else {
+            remindersContainer.innerHTML = '<p class="text-muted text-center py-3">暂无待办事项 ✓</p>';
+        }
+        
+        // 渲染生日提醒
+        const birthdaysContainer = document.getElementById('birthdays-container');
+        if (data.birthdays.length > 0) {
+            let html = '<ul class="list-group list-group-flush">';
+            data.birthdays.forEach(item => {
+                html += `
+                    <li class="list-group-item">
+                        <a href="/customers/${item.customer_id}" class="text-decoration-none">
+                            <strong>${item.customer_name}</strong>
+                        </a>
+                        <br><small class="text-info">${item.message}</small>
+                    </li>
+                `;
+            });
+            html += '</ul>';
+            birthdaysContainer.innerHTML = html;
+        } else {
+            birthdaysContainer.innerHTML = '<p class="text-muted text-center py-3">近期无客户生日</p>';
+        }
+        
+    } catch (error) {
+        console.error('加载提醒失败:', error);
+        document.getElementById('reminders-container').innerHTML = '<p class="text-danger">加载失败</p>';
+        document.getElementById('birthdays-container').innerHTML = '<p class="text-danger">加载失败</p>';
+    }
+}
+
+// 页面加载时获取提醒
+document.addEventListener('DOMContentLoaded', loadReminders);
+</script>
+{% endblock %}
+

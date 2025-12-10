@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- 页面标题 -->
+    <div class="col-12 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/">首页</a></li>
+                <li class="breadcrumb-item"><a href="/customers">客户列表</a></li>
+                <li class="breadcrumb-item active">{{ customer.name }}</li>
+            </ol>
+        </nav>
+        
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h2><i class="bi bi-person-circle"></i> {{ customer.name }}</h2>
+                <p class="text-muted mb-0">
+                    创建于 {{ customer.created_at.strftime('%Y-%m-%d %H:%M') if customer.created_at else '-' }}
+                    {% if customer.updated_at %}
+                    · 最后更新 {{ customer.updated_at.strftime('%Y-%m-%d %H:%M') }}
+                    {% endif %}
+                </p>
+            </div>
+            <div class="btn-group">
+                <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline-primary">
+                    <i class="bi bi-pencil"></i> 编辑
+                </a>
+                <button class="btn btn-info" id="analyzeBtn" {% if customer.status == 'AI分析中' %}disabled{% endif %}>
+                    <i class="bi bi-robot"></i> AI 分析
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 状态流转 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="me-2">当前状态：</span>
+                        <span class="badge fs-6 {{ 'bg-warning text-dark' if customer.status == '待录入' else 'bg-info' if customer.status == 'AI分析中' else 'bg-primary' if customer.status == '已出方案' else 'bg-secondary' if customer.status == '跟进中' else 'bg-success' }}">
+                            {{ customer.status }}
+                        </span>
+                    </div>
+                    <div class="btn-group">
+                        {% for status in statuses %}
+                        <button class="btn btn-sm {{ 'btn-primary' if customer.status == status else 'btn-outline-secondary' }} status-btn"
+                                data-status="{{ status }}"
+                                {% if customer.status == status %}disabled{% endif %}>
+                            {{ status }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 左侧：KYC 档案 -->
+    <div class="col-lg-5 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-person"></i> KYC 档案</h5>
+            </div>
+            <div class="card-body">
+                {% if customer.kyc_data and form_schema %}
+                {% for section in form_schema.sections %}
+                <h6 class="text-primary border-bottom pb-2 mb-3">{{ section.title }}</h6>
+                {% for field in section.fields %}
+                {% set value = customer.kyc_data.get(field.name) %}
+                {% if value %}
+                <div class="row mb-2">
+                    <div class="col-4 text-muted">{{ field.label }}</div>
+                    <div class="col-8">
+                        {% if value is iterable and value is not string %}
+                        {{ value | join('、') }}
+                        {% else %}
+                        {{ value }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% endfor %}
+                {% else %}
+                <p class="text-muted text-center py-4">
+                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                    暂无 KYC 数据
+                    <br>
+                    <a href="/customers/{{ customer.id }}/edit" class="btn btn-primary btn-sm mt-3">
+                        填写 KYC 表单
+                    </a>
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- 右侧：AI 分析报告 -->
+    <div class="col-lg-7 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-richtext"></i> AI 分析报告</h5>
+                {% if customer.ai_report %}
+                <small class="text-muted">AI 智能生成</small>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if customer.ai_report %}
+                <div class="markdown-body">
+                    {{ customer.ai_report | markdown | safe }}
+                </div>
+                {% else %}
+                <p class="text-muted text-center py-4">
+                    <i class="bi bi-robot fs-1 d-block mb-2"></i>
+                    暂无 AI 分析报告
+                    <br>
+                    {% if customer.kyc_data %}
+                    <button class="btn btn-info btn-sm mt-3" id="generateReportBtn">
+                        <i class="bi bi-robot"></i> 生成 AI 报告
+                    </button>
+                    {% else %}
+                    <small>请先填写 KYC 表单</small>
+                    {% endif %}
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 家庭与关系 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-people"></i> 家庭与关系</h5>
+            </div>
+            <div class="card-body">
+                <!-- 子女信息 -->
+                {% if customer.kyc_data and customer.kyc_data.get('children_count') %}
+                <h6 class="text-primary">子女信息</h6>
+                <p>
+                    子女数量：{{ customer.kyc_data.get('children_count', 0) }} 人
+                    {% if customer.kyc_data.get('children_education') %}
+                    <br>教育阶段：{{ customer.kyc_data.get('children_education') | join('、') }}
+                    {% endif %}
+                </p>
+                <hr>
+                {% endif %}
+                
+                <!-- 关联人 -->
+                <h6 class="text-primary">关联人</h6>
+                {% if customer.related_contacts %}
+                <ul class="list-group list-group-flush">
+                    {% for contact in customer.related_contacts %}
+                    <li class="list-group-item px-0">
+                        <strong>{{ contact.name }}</strong>
+                        {% if contact.relation %}
+                        <span class="badge bg-secondary">{{ contact.relation }}</span>
+                        {% endif %}
+                        {% if contact.note %}
+                        <br><small class="text-muted">{{ contact.note }}</small>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="text-muted">暂无关联人记录</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- AI 商机挖掘 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0"><i class="bi bi-lightbulb"></i> AI 商机挖掘</h5>
+            </div>
+            <div class="card-body">
+                {% if customer.ai_opportunities %}
+                {% for opp in customer.ai_opportunities %}
+                <div class="card mb-3 border-{{ 'danger' if opp.priority == 'high' else 'warning' if opp.priority == 'medium' else 'secondary' }}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <h6 class="card-title mb-1">
+                                <i class="bi bi-{{ 'star-fill text-danger' if opp.priority == 'high' else 'star-half text-warning' if opp.priority == 'medium' else 'star' }}"></i>
+                                {{ opp.type }}
+                            </h6>
+                            <span class="badge bg-{{ 'danger' if opp.priority == 'high' else 'warning text-dark' if opp.priority == 'medium' else 'secondary' }}">
+                                {{ '高优先' if opp.priority == 'high' else '中优先' if opp.priority == 'medium' else '低优先' }}
+                            </span>
+                        </div>
+                        <p class="card-text small text-muted mb-0">{{ opp.description }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p class="text-muted text-center py-4">
+                    <i class="bi bi-lightbulb fs-1 d-block mb-2"></i>
+                    暂无商机数据
+                    <br>
+                    <small>运行 AI 分析后将自动挖掘商机</small>
+                </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 跟进信息 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-calendar-event"></i> 跟进信息</h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <label class="form-label">下次跟进日期</label>
+                        <input type="date" class="form-control" id="followUpDate" 
+                               value="{{ customer.next_follow_up.strftime('%Y-%m-%d') if customer.next_follow_up else '' }}">
+                    </div>
+                    <div class="col-md-6">
+                        {% if customer.birthday %}
+                        <p class="mb-0">
+                            <i class="bi bi-gift"></i> 生日：{{ customer.birthday.strftime('%Y-%m-%d') }}
+                        </p>
+                        {% else %}
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-gift"></i> 未记录生日信息
+                            <button class="btn btn-sm btn-link" data-bs-toggle="modal" data-bs-target="#birthdayModal">
+                                添加
+                            </button>
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 生日模态框 -->
+<div class="modal fade" id="birthdayModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">设置客户生日</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="form-label">生日日期</label>
+                <input type="date" class="form-control" id="birthdayInput">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveBirthday">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const customerId = {{ customer.id }};
+
+// 状态流转
+document.querySelectorAll('.status-btn').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const status = this.dataset.status;
+        
+        try {
+            const response = await fetch(`/api/customers/${customerId}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: status })
+            });
+            
+            if (response.ok) {
+                window.location.reload();
+            } else {
+                alert('状态更新失败');
+            }
+        } catch (error) {
+            console.error('更新失败:', error);
+            alert('状态更新失败');
+        }
+    });
+});
+
+// AI 分析
+async function runAnalysis() {
+    const btn = document.getElementById('analyzeBtn');
+    const generateBtn = document.getElementById('generateReportBtn');
+    
+    // 禁用两个按钮
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 分析中...';
+    if (generateBtn) {
+        generateBtn.disabled = true;
+        generateBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 分析中...';
+    }
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2分钟超时
+        
+        const response = await fetch(`/api/analyze/${customerId}`, {
+            method: 'POST',
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('分析成功:', result);
+            window.location.reload();
+        } else {
+            let errorMsg = 'AI分析失败';
+            try {
+                const error = await response.json();
+                errorMsg = error.detail || errorMsg;
+            } catch (e) {
+                errorMsg = `AI分析失败: HTTP ${response.status}`;
+            }
+            alert(errorMsg);
+        }
+    } catch (error) {
+        console.error('分析失败:', error);
+        if (error.name === 'AbortError') {
+            alert('AI分析超时，请稍后重试');
+        } else {
+            alert(`AI分析失败: ${error.message || '网络错误'}`);
+        }
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-robot"></i> AI 分析';
+        if (generateBtn) {
+            generateBtn.disabled = false;
+            generateBtn.innerHTML = '<i class="bi bi-robot"></i> 生成 AI 报告';
+        }
+    }
+}
+
+document.getElementById('analyzeBtn').addEventListener('click', runAnalysis);
+
+const generateBtn = document.getElementById('generateReportBtn');
+if (generateBtn) {
+    generateBtn.addEventListener('click', runAnalysis);
+}
+
+// 跟进日期更新
+document.getElementById('followUpDate').addEventListener('change', async function() {
+    try {
+        await fetch(`/api/customers/${customerId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ next_follow_up: this.value || null })
+        });
+    } catch (error) {
+        console.error('更新失败:', error);
+    }
+});
+
+// 保存生日
+document.getElementById('saveBirthday').addEventListener('click', async function() {
+    const birthday = document.getElementById('birthdayInput').value;
+    
+    try {
+        const response = await fetch(`/api/customers/${customerId}/birthday`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ birthday: birthday || null })
+        });
+        
+        if (response.ok) {
+            window.location.reload();
+        } else {
+            alert('保存失败');
+        }
+    } catch (error) {
+        console.error('保存失败:', error);
+        alert('保存失败');
+    }
+});
+</script>
+{% endblock %}
+

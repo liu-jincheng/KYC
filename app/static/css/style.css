@@ -1,0 +1,249 @@
+/* 侨慧·本地CRM 自定义样式 */
+
+/* 基础样式 */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background-color: #f8f9fa;
+}
+
+main {
+    flex: 1;
+}
+
+/* 导航栏 */
+.navbar-brand {
+    font-weight: 600;
+}
+
+.navbar-brand i {
+    margin-right: 0.5rem;
+}
+
+/* 卡片样式 */
+.card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border: none;
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    font-weight: 600;
+}
+
+/* 统计卡片 */
+.card h3 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 0;
+}
+
+/* 表格样式 */
+.table th {
+    font-weight: 600;
+    color: #495057;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+/* 徽章样式 */
+.badge {
+    font-weight: 500;
+    padding: 0.4em 0.8em;
+}
+
+/* 按钮组 */
+.btn-group .btn {
+    margin-right: 0;
+}
+
+/* 表单样式 */
+.form-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+}
+
+/* 多选容器 */
+.multiselect-container {
+    background-color: #fff;
+}
+
+.multiselect-container .form-check {
+    padding-left: 1.75rem;
+}
+
+/* 关联人卡片 */
+.contact-item {
+    background-color: #f8f9fa;
+}
+
+.contact-item .remove-contact {
+    padding: 0;
+    line-height: 1;
+}
+
+/* Markdown 渲染样式 */
+.markdown-body {
+    line-height: 1.7;
+}
+
+.markdown-body h1 {
+    font-size: 1.5rem;
+    margin-top: 1.5rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #eaecef;
+}
+
+.markdown-body h2 {
+    font-size: 1.3rem;
+    margin-top: 1.25rem;
+    margin-bottom: 0.75rem;
+}
+
+.markdown-body h3 {
+    font-size: 1.1rem;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.markdown-body p {
+    margin-bottom: 0.75rem;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+    padding-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.markdown-body li {
+    margin-bottom: 0.25rem;
+}
+
+.markdown-body code {
+    background-color: #f6f8fa;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
+    font-size: 85%;
+}
+
+.markdown-body pre {
+    background-color: #f6f8fa;
+    padding: 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+
+.markdown-body pre code {
+    background-color: transparent;
+    padding: 0;
+}
+
+.markdown-body blockquote {
+    border-left: 4px solid #dfe2e5;
+    padding-left: 1rem;
+    color: #6a737d;
+    margin: 0.75rem 0;
+}
+
+.markdown-body table {
+    width: 100%;
+    margin-bottom: 1rem;
+    border-collapse: collapse;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+    padding: 0.5rem;
+    border: 1px solid #dfe2e5;
+}
+
+.markdown-body table th {
+    background-color: #f6f8fa;
+}
+
+.markdown-body hr {
+    margin: 1.5rem 0;
+    border: none;
+    border-top: 1px solid #eaecef;
+}
+
+/* 商机卡片 */
+.card.border-danger {
+    border-left-width: 4px !important;
+}
+
+.card.border-warning {
+    border-left-width: 4px !important;
+}
+
+.card.border-secondary {
+    border-left-width: 4px !important;
+}
+
+/* 状态按钮组 */
+.status-btn {
+    transition: all 0.2s;
+}
+
+.status-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+/* 快速操作按钮 */
+.btn.py-3 i {
+    font-size: 1.5rem;
+}
+
+/* 页脚 */
+.footer {
+    border-top: 1px solid #e9ecef;
+}
+
+/* 加载动画 */
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+    .card h3 {
+        font-size: 1.5rem;
+    }
+    
+    .btn-group {
+        flex-wrap: wrap;
+    }
+    
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+}
+
+/* 打印样式 */
+@media print {
+    .navbar,
+    .footer,
+    .btn,
+    .btn-group {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #ddd;
+        box-shadow: none;
+    }
+}
+
