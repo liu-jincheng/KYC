@@ -3,7 +3,7 @@ Pydantic 数据验证模型
 """
 from pydantic import BaseModel, Field
 from typing import Optional, List, Any
-from datetime import date, datetime
+from datetime import date as dt_date, datetime
 from enum import Enum
 
 
@@ -23,7 +23,8 @@ class CustomerCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="客户姓名")
     kyc_data: Optional[dict] = Field(default=None, description="KYC表单数据")
     related_contacts: Optional[List[dict]] = Field(default=None, description="关联人信息")
-    next_follow_up: Optional[date] = Field(default=None, description="下次跟进日期")
+    next_follow_up: Optional[dt_date] = Field(default=None, description="下次跟进日期")
+    birthday: Optional[dt_date] = Field(default=None, description="生日")
 
 
 class CustomerUpdate(BaseModel):
@@ -31,7 +32,8 @@ class CustomerUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     kyc_data: Optional[dict] = None
     related_contacts: Optional[List[dict]] = None
-    next_follow_up: Optional[date] = None
+    next_follow_up: Optional[dt_date] = None
+    birthday: Optional[dt_date] = None
 
 
 class CustomerStatusUpdate(BaseModel):
@@ -41,7 +43,7 @@ class CustomerStatusUpdate(BaseModel):
 
 class CustomerBirthdayUpdate(BaseModel):
     """更新客户生日请求"""
-    birthday: Optional[date] = None
+    birthday: Optional[dt_date] = None
 
 
 class CustomerResponse(BaseModel):
@@ -52,9 +54,9 @@ class CustomerResponse(BaseModel):
     status: str
     ai_report: Optional[str] = None
     ai_opportunities: Optional[List[dict]] = None
-    birthday: Optional[date] = None
+    birthday: Optional[dt_date] = None
     related_contacts: Optional[List[dict]] = None
-    next_follow_up: Optional[date] = None
+    next_follow_up: Optional[dt_date] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -144,7 +146,7 @@ class ReminderItem(BaseModel):
     customer_id: int
     customer_name: str
     message: str
-    date: Optional[date] = None
+    date: Optional[dt_date] = None
 
 
 class DashboardStats(BaseModel):

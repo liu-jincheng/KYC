@@ -4,58 +4,119 @@
 <div class="row">
     <!-- 页面标题 -->
     <div class="col-12 mb-4">
-        <h2><i class="bi bi-speedometer2"></i> 仪表盘</h2>
-        <p class="text-muted">欢迎回来！这是您的客户管理概览。</p>
+        <div class="page-header">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div>
+                    <p class="text-uppercase text-muted small mb-1">运营概览</p>
+                    <h2 class="mb-1"><i class="bi bi-speedometer2 me-1"></i> 仪表盘</h2>
+                    <p class="lead mb-2 text-muted">一眼掌握客户分布、任务提醒与最新动态。</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="soft-badge"><span class="badge-dot bg-primary"></span>总计 {{ stats.total }} 客户</span>
+                        <span class="soft-badge"><span class="badge-dot bg-warning"></span>待录入 {{ stats.pending }}</span>
+                        <span class="soft-badge"><span class="badge-dot bg-success"></span>已签约 {{ stats.signed }}</span>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="/customers/new" class="btn btn-primary btn-icon px-3">
+                        <i class="bi bi-plus-circle"></i> 新建客户
+                    </a>
+                    <a href="/customers" class="btn btn-outline-light btn-icon px-3">
+                        <i class="bi bi-list-ul"></i> 浏览客户
+                    </a>
+                    <a href="/settings" class="btn btn-outline-secondary btn-icon px-3">
+                        <i class="bi bi-sliders2"></i> 表单设置
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
 <!-- 统计卡片 -->
-<div class="row mb-4">
-    <div class="col-md-2 col-sm-4 col-6 mb-3">
-        <div class="card text-center h-100">
+<div class="row g-3 mb-4">
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="card stat-card text-center h-100 primary">
             <div class="card-body">
+                <div class="text-muted small mb-1">总客户数</div>
                 <h3 class="card-title text-primary">{{ stats.total }}</h3>
-                <p class="card-text text-muted">总客户数</p>
             </div>
         </div>
     </div>
-    <div class="col-md-2 col-sm-4 col-6 mb-3">
-        <div class="card text-center h-100 border-warning">
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="card stat-card text-center h-100 warning">
             <div class="card-body">
+                <div class="text-muted small mb-1">待录入</div>
                 <h3 class="card-title text-warning">{{ stats.pending }}</h3>
-                <p class="card-text text-muted">待录入</p>
             </div>
         </div>
     </div>
-    <div class="col-md-2 col-sm-4 col-6 mb-3">
-        <div class="card text-center h-100 border-info">
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="card stat-card text-center h-100 info">
             <div class="card-body">
+                <div class="text-muted small mb-1">AI分析中</div>
                 <h3 class="card-title text-info">{{ stats.analyzing }}</h3>
-                <p class="card-text text-muted">AI分析中</p>
             </div>
         </div>
     </div>
-    <div class="col-md-2 col-sm-4 col-6 mb-3">
-        <div class="card text-center h-100 border-primary">
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="card stat-card text-center h-100 primary">
             <div class="card-body">
+                <div class="text-muted small mb-1">已出方案</div>
                 <h3 class="card-title text-primary">{{ stats.reported }}</h3>
-                <p class="card-text text-muted">已出方案</p>
             </div>
         </div>
     </div>
-    <div class="col-md-2 col-sm-4 col-6 mb-3">
-        <div class="card text-center h-100 border-secondary">
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="card stat-card text-center h-100 secondary">
             <div class="card-body">
+                <div class="text-muted small mb-1">跟进中</div>
                 <h3 class="card-title text-secondary">{{ stats.following }}</h3>
-                <p class="card-text text-muted">跟进中</p>
             </div>
         </div>
     </div>
-    <div class="col-md-2 col-sm-4 col-6 mb-3">
-        <div class="card text-center h-100 border-success">
+    <div class="col-md-2 col-sm-4 col-6">
+        <div class="card stat-card text-center h-100 success">
             <div class="card-body">
+                <div class="text-muted small mb-1">已签约</div>
                 <h3 class="card-title text-success">{{ stats.signed }}</h3>
-                <p class="card-text text-muted">已签约</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 状态分布 -->
+{% set safe_total = stats.total if stats.total else 1 %}
+{% set pending_width = (stats.pending / safe_total * 100) | round(0, 'floor') %}
+{% set analyzing_width = (stats.analyzing / safe_total * 100) | round(0, 'floor') %}
+{% set reported_width = (stats.reported / safe_total * 100) | round(0, 'floor') %}
+{% set following_width = (stats.following / safe_total * 100) | round(0, 'floor') %}
+{% set signed_width_raw = 100 - pending_width - analyzing_width - reported_width - following_width %}
+{% set signed_width = 0 if signed_width_raw < 0 else signed_width_raw %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <i class="bi bi-graph-up text-primary"></i>
+                        <h6 class="mb-0">状态分布</h6>
+                    </div>
+                    <span class="text-muted small">快速定位优先客户</span>
+                </div>
+                <div class="progress" role="progressbar" style="height: 14px;">
+                    <div class="progress-bar bg-warning text-dark" style="width: {{ pending_width }}%"></div>
+                    <div class="progress-bar bg-info" style="width: {{ analyzing_width }}%"></div>
+                    <div class="progress-bar bg-primary" style="width: {{ reported_width }}%"></div>
+                    <div class="progress-bar bg-secondary" style="width: {{ following_width }}%"></div>
+                    <div class="progress-bar bg-success" style="width: {{ signed_width }}%"></div>
+                </div>
+                <div class="d-flex flex-wrap gap-3 mt-3 text-muted small">
+                    <span><span class="badge-dot bg-warning"></span>待录入</span>
+                    <span><span class="badge-dot bg-info"></span>AI分析中</span>
+                    <span><span class="badge-dot bg-primary"></span>已出方案</span>
+                    <span><span class="badge-dot bg-secondary"></span>跟进中</span>
+                    <span><span class="badge-dot bg-success"></span>已签约</span>
+                </div>
             </div>
         </div>
     </div>
@@ -105,7 +166,7 @@
                 <ul class="list-group list-group-flush">
                     {% for customer in recent_customers %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <a href="/customers/{{ customer.id }}" class="text-decoration-none">
+                        <a href="/customers/{{ customer.id }}" class="text-decoration-none fw-semibold">
                             {{ customer.name }}
                         </a>
                         <span class="badge {{ 'bg-warning text-dark' if customer.status == '待录入' else 'bg-info' if customer.status == 'AI分析中' else 'bg-primary' if customer.status == '已出方案' else 'bg-secondary' if customer.status == '跟进中' else 'bg-success' }}">
@@ -135,25 +196,25 @@
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-3 col-sm-6">
-                        <a href="/customers/new" class="btn btn-primary w-100 py-3">
+                        <a href="/customers/new" class="btn btn-primary w-100 py-3 quick-action">
                             <i class="bi bi-person-plus fs-4 d-block mb-2"></i>
                             新建客户
                         </a>
                     </div>
                     <div class="col-md-3 col-sm-6">
-                        <a href="/customers?status=待录入" class="btn btn-warning w-100 py-3">
+                        <a href="/customers?status=待录入" class="btn btn-warning w-100 py-3 quick-action">
                             <i class="bi bi-pencil-square fs-4 d-block mb-2"></i>
                             待录入客户
                         </a>
                     </div>
                     <div class="col-md-3 col-sm-6">
-                        <a href="/customers?status=已出方案" class="btn btn-info w-100 py-3">
+                        <a href="/customers?status=已出方案" class="btn btn-info w-100 py-3 quick-action">
                             <i class="bi bi-file-earmark-text fs-4 d-block mb-2"></i>
                             查看方案
                         </a>
                     </div>
                     <div class="col-md-3 col-sm-6">
-                        <a href="/settings" class="btn btn-secondary w-100 py-3">
+                        <a href="/settings" class="btn btn-secondary w-100 py-3 quick-action">
                             <i class="bi bi-gear fs-4 d-block mb-2"></i>
                             表单设置
                         </a>
@@ -176,31 +237,34 @@ async function loadReminders() {
         // 渲染跟进提醒
         const remindersContainer = document.getElementById('reminders-container');
         if (data.follow_ups.length > 0 || data.stale_analyses.length > 0) {
-            let html = '<ul class="list-group list-group-flush">';
+            let html = '';
             
             data.follow_ups.forEach(item => {
                 html += `
-                    <li class="list-group-item">
-                        <a href="/customers/${item.customer_id}" class="text-decoration-none">
-                            <strong>${item.customer_name}</strong>
-                        </a>
-                        <br><small class="text-muted">${item.message}</small>
-                    </li>
-                `;
+                    <div class="list-tile">
+                        <span class="icon"><i class="bi bi-bell"></i></span>
+                        <div>
+                            <a href="/customers/${item.customer_id}" class="text-decoration-none fw-semibold">
+                                ${item.customer_name}
+                            </a>
+                            <div><small class="text-muted">${item.message}</small></div>
+                        </div>
+                    </div>`;
             });
             
             data.stale_analyses.forEach(item => {
                 html += `
-                    <li class="list-group-item list-group-item-warning">
-                        <a href="/customers/${item.customer_id}" class="text-decoration-none">
-                            <strong>${item.customer_name}</strong>
-                        </a>
-                        <br><small class="text-danger">${item.message}</small>
-                    </li>
-                `;
+                    <div class="list-tile">
+                        <span class="icon bg-warning text-dark"><i class="bi bi-exclamation-triangle"></i></span>
+                        <div>
+                            <a href="/customers/${item.customer_id}" class="text-decoration-none fw-semibold">
+                                ${item.customer_name}
+                            </a>
+                            <div><small class="text-danger">${item.message}</small></div>
+                        </div>
+                    </div>`;
             });
             
-            html += '</ul>';
             remindersContainer.innerHTML = html;
         } else {
             remindersContainer.innerHTML = '<p class="text-muted text-center py-3">暂无待办事项 ✓</p>';
@@ -209,18 +273,19 @@ async function loadReminders() {
         // 渲染生日提醒
         const birthdaysContainer = document.getElementById('birthdays-container');
         if (data.birthdays.length > 0) {
-            let html = '<ul class="list-group list-group-flush">';
+            let html = '';
             data.birthdays.forEach(item => {
                 html += `
-                    <li class="list-group-item">
-                        <a href="/customers/${item.customer_id}" class="text-decoration-none">
-                            <strong>${item.customer_name}</strong>
-                        </a>
-                        <br><small class="text-info">${item.message}</small>
-                    </li>
-                `;
+                    <div class="list-tile">
+                        <span class="icon bg-info text-white"><i class="bi bi-gift"></i></span>
+                        <div>
+                            <a href="/customers/${item.customer_id}" class="text-decoration-none fw-semibold">
+                                ${item.customer_name}
+                            </a>
+                            <div><small class="text-info">${item.message}</small></div>
+                        </div>
+                    </div>`;
             });
-            html += '</ul>';
             birthdaysContainer.innerHTML = html;
         } else {
             birthdaysContainer.innerHTML = '<p class="text-muted text-center py-3">近期无客户生日</p>';

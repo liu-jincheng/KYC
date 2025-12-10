@@ -161,8 +161,12 @@
                 </div>
                 <div class="card-body">
                     <label for="next_follow_up" class="form-label">下次跟进日期</label>
-                    <input type="date" class="form-control" id="next_follow_up" name="next_follow_up"
+                    <input type="date" class="form-control mb-3" id="next_follow_up" name="next_follow_up"
                            value="{{ customer.next_follow_up.strftime('%Y-%m-%d') if customer and customer.next_follow_up else '' }}">
+                    
+                    <label for="birthday" class="form-label">生日</label>
+                    <input type="date" class="form-control" id="birthday" name="birthday"
+                           value="{{ customer.birthday.strftime('%Y-%m-%d') if customer and customer.birthday else '' }}">
                 </div>
             </div>
             
@@ -253,7 +257,8 @@ function collectFormData() {
     const formData = {
         kyc_data: {},
         related_contacts: [],
-        next_follow_up: null
+        next_follow_up: null,
+        birthday: null
     };
     
     // 收集 KYC 数据
@@ -301,8 +306,26 @@ function collectFormData() {
     const followUpDate = document.getElementById('next_follow_up').value;
     formData.next_follow_up = followUpDate || null;
     
+    // 生日
+    const birthday = document.getElementById('birthday').value;
+    formData.birthday = birthday || null;
+    
     return formData;
 }
+
+// 日期控件
+['next_follow_up', 'birthday'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el && window.flatpickr) {
+        flatpickr(el, {
+            dateFormat: 'Y-m-d',
+            defaultDate: el.value || undefined,
+            locale: 'zh',
+            allowInput: true,
+            disableMobile: true
+        });
+    }
+});
 
 // 表单提交
 document.getElementById('customerForm').addEventListener('submit', async function(e) {

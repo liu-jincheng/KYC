@@ -52,6 +52,7 @@ def create_customer(
         kyc_data=customer_data.kyc_data,
         related_contacts=customer_data.related_contacts,
         next_follow_up=customer_data.next_follow_up,
+        birthday=customer_data.birthday,
         status=CustomerStatus.PENDING.value
     )
     
