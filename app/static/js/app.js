@@ -159,6 +159,81 @@ function throttle(func, limit) {
     };
 }
 
+// 新手引导模块
+const onboarding = {
+    STORAGE_KEY: 'crm_onboarding_seen_v1',
+    modalInstance: null,
+    
+    /**
+     * 初始化新手引导
+     * 首次访问时自动弹出，关闭后标记为已看过
+     */
+    init() {
+        const modalEl = document.getElementById('onboardingModal');
+        if (!modalEl) return;
+        
+        this.modalInstance = new bootstrap.Modal(modalEl);
+        
+        // 监听弹窗关闭事件，标记为已看过
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            this.markSeen();
+        });
+        
+        // 检查是否首次访问
+        if (!this.hasSeen()) {
+            // 延迟 300ms 显示，让页面先渲染完成
+            setTimeout(() => {
+                this.show();
+            }, 300);
+        }
+    },
+    
+    /**
+     * 检查用户是否已看过引导
+     */
+    hasSeen() {
+        try {
+            return localStorage.getItem(this.STORAGE_KEY) === 'true';
+        } catch (e) {
+            // 隐私模式或禁用 localStorage 时忽略
+            return false;
+        }
+    },
+    
+    /**
+     * 标记为已看过
+     */
+    markSeen() {
+        try {
+            localStorage.setItem(this.STORAGE_KEY, 'true');
+        } catch (e) {
+            // 隐私模式或禁用 localStorage 时忽略
+        }
+    },
+    
+    /**
+     * 显示新手引导弹窗
+     */
+    show() {
+        if (this.modalInstance) {
+            this.modalInstance.show();
+        }
+    },
+    
+    /**
+     * 重置引导状态并重新显示
+     * 供帮助页"重新显示新手引导"按钮调用
+     */
+    reset() {
+        try {
+            localStorage.removeItem(this.STORAGE_KEY);
+        } catch (e) {
+            // 隐私模式或禁用 localStorage 时忽略
+        }
+        this.show();
+    }
+};
+
 // 页面加载完成后执行
 document.addEventListener('DOMContentLoaded', function() {
     // 初始化所有 tooltip
@@ -176,6 +251,9 @@ document.addEventListener('DOMContentLoaded', function() {
             bsAlert.close();
         }, 5000);
     });
+    
+    // 初始化新手引导
+    onboarding.init();
 });
 
 // 导出工具函数
@@ -187,5 +265,6 @@ window.CRM = {
     formatDateTime,
     getStatusBadge,
     debounce,
-    throttle
+    throttle,
+    onboarding
 };

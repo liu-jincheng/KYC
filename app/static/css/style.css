@@ -350,15 +350,35 @@ main {
     margin: 0.75rem 0;
 }
 
-/* AI 分析报告滚动容器 */
-.ai-report-body {
-    max-height: 70vh;
+/* AI 分析报告卡片 - 使用 flex 布局填满整个卡片 */
+.ai-report-card {
+    display: flex;
+    flex-direction: column;
+    /* 确保卡片不会因为内容撑开而超出父容器 */
+    min-height: 0;
+}
+
+.ai-report-card > .card-header {
+    flex-shrink: 0;
+}
+
+/* AI 分析报告滚动容器 - 填满卡片剩余空间 */
+.ai-report-card > .ai-report-body {
+    flex: 1 1 0;
+    min-height: 200px; /* 最小高度 */
     overflow-y: auto;
     padding-right: 0.75rem;
 }
 
 .ai-report-body .markdown-body {
     overflow-wrap: break-word;
+}
+
+/* 小屏幕下卡片堆叠时，给 AI 报告一个合理的最大高度 */
+@media (max-width: 991.98px) {
+    .ai-report-card > .ai-report-body {
+        max-height: 60vh;
+    }
 }
 
 .markdown-body table {

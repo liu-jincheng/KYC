@@ -51,6 +51,11 @@
                             <i class="bi bi-gear"></i> 表单设置
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if page_title == '使用说明' %}active{% endif %}" href="/help">
+                            <i class="bi bi-question-circle"></i> 使用说明
+                        </a>
+                    </li>
                 </ul>
                 <div class="d-flex gap-2 align-items-center">
                     <span class="text-muted small d-none d-xl-inline">数据本地存储 · 更安心</span>
@@ -78,6 +83,71 @@
             <span class="text-muted">侨慧·本地CRM v1.0 - 您的数据安全存储在本地</span>
         </div>
     </footer>
+
+    <!-- 新手引导弹窗 -->
+    <div class="modal fade" id="onboardingModal" tabindex="-1" aria-labelledby="onboardingModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="onboardingModalLabel">
+                        <i class="bi bi-hand-wave me-2"></i>欢迎使用侨慧·本地CRM
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="lead mb-4">只需 3 步，即可开始管理您的高净值客户：</p>
+                    
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <div class="rounded-circle bg-primary text-white d-inline-flex align-items-center justify-content-center mb-2" style="width: 48px; height: 48px;">
+                                    <i class="bi bi-1-circle fs-4"></i>
+                                </div>
+                                <h6>新建客户</h6>
+                                <p class="text-muted small mb-0">填写客户姓名与 KYC 信息，一键保存。</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <div class="rounded-circle bg-info text-white d-inline-flex align-items-center justify-content-center mb-2" style="width: 48px; height: 48px;">
+                                    <i class="bi bi-2-circle fs-4"></i>
+                                </div>
+                                <h6>AI 智能分析</h6>
+                                <p class="text-muted small mb-0">点击「AI 分析」，自动生成移民方案建议。</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <div class="rounded-circle bg-success text-white d-inline-flex align-items-center justify-content-center mb-2" style="width: 48px; height: 48px;">
+                                    <i class="bi bi-3-circle fs-4"></i>
+                                </div>
+                                <h6>跟进签约</h6>
+                                <p class="text-muted small mb-0">设置跟进日期，仪表盘自动提醒到期客户。</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-light border mb-0">
+                        <i class="bi bi-shield-check text-success me-2"></i>
+                        <strong>数据安全</strong>：所有客户信息存储在本地数据库，无需担心云端泄露。
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <a href="/help" class="btn btn-link text-muted">
+                        <i class="bi bi-book"></i> 查看完整说明
+                    </a>
+                    <div class="d-flex gap-2">
+                        <a href="/settings" class="btn btn-outline-secondary">
+                            <i class="bi bi-gear"></i> 表单设置
+                        </a>
+                        <a href="/customers/new" class="btn btn-primary">
+                            <i class="bi bi-plus-circle"></i> 新建客户
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bootstrap 5 JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>

@@ -193,3 +193,11 @@ async def settings_page(request: Request):
     finally:
         db.close()
 
+
+@app.get("/help", response_class=HTMLResponse)
+async def help_page(request: Request):
+    """使用说明页"""
+    return templates.TemplateResponse("help.html", {
+        "request": request,
+        "page_title": "使用说明"
+    })
