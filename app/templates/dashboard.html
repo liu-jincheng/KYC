@@ -224,11 +224,111 @@
         </div>
     </div>
 </div>
+
+<!-- 生日祝福生成 Modal -->
+<div class="modal fade" id="birthdayGreetingModal" tabindex="-1" aria-labelledby="birthdayGreetingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="birthdayGreetingModalLabel">
+                    <i class="bi bi-gift me-2"></i>生成生日祝福
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="关闭"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 客户信息 -->
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">客户姓名</label>
+                    <div class="form-control-plaintext fs-5" id="greetingCustomerName">-</div>
+                </div>
+                
+                <!-- 风格选择 -->
+                <div class="mb-3">
+                    <label for="greetingStyle" class="form-label fw-semibold">祝福风格</label>
+                    <select class="form-select" id="greetingStyle">
+                        <option value="商务专业" selected>商务专业 - 正式、得体</option>
+                        <option value="温馨亲切">温馨亲切 - 友好、温暖</option>
+                        <option value="幽默风趣">幽默风趣 - 轻松、有趣</option>
+                        <option value="长辈尊享">长辈尊享 - 庄重、敬意</option>
+                    </select>
+                </div>
+                
+                <!-- 生成按钮 -->
+                <div class="mb-3">
+                    <button type="button" class="btn btn-info" id="generateGreetingBtn">
+                        <i class="bi bi-magic me-1"></i> 生成祝福
+                    </button>
+                </div>
+                
+                <!-- 结果区域 -->
+                <div id="greetingResultArea" style="display: none;">
+                    <hr>
+                    <label class="form-label fw-semibold">生成的祝福语</label>
+                    <div class="card bg-light">
+                        <div class="card-body">
+                            <pre id="greetingResult" class="mb-0" style="white-space: pre-wrap; font-family: inherit;"></pre>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="button" class="btn btn-success" id="copyGreetingBtn">
+                            <i class="bi bi-clipboard me-1"></i> 复制到剪贴板
+                        </button>
+                        <span id="copySuccess" class="text-success ms-2" style="display: none;">
+                            <i class="bi bi-check-circle"></i> 已复制！
+                        </span>
+                    </div>
+                </div>
+                
+                <!-- 加载状态 / 流式生成状态 -->
+                <div id="greetingLoading" style="display: none;" class="text-center py-4">
+                    <div class="spinner-border text-info spinner-border-sm" role="status">
+                        <span class="visually-hidden">生成中...</span>
+                    </div>
+                    <span id="greetingStatusText" class="ms-2 text-info">AI 正在生成祝福语...</span>
+                </div>
+                
+                <!-- 错误提示 -->
+                <div id="greetingError" class="alert alert-danger" style="display: none;"></div>
+                
+                <!-- 历史记录区域 -->
+                <div class="accordion mt-3" id="greetingHistoryAccordion">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#greetingHistoryPanel" aria-expanded="false" aria-controls="greetingHistoryPanel">
+                                <i class="bi bi-clock-history me-2"></i>历史记录 <span id="historyCount" class="badge bg-secondary ms-2">0</span>
+                            </button>
+                        </h2>
+                        <div id="greetingHistoryPanel" class="accordion-collapse collapse" data-bs-parent="#greetingHistoryAccordion">
+                            <div class="accordion-body p-2">
+                                <div id="greetingHistoryList" class="list-group list-group-flush" style="max-height: 300px; overflow-y: auto;">
+                                    <p class="text-muted text-center py-2 mb-0">暂无历史记录</p>
+                                </div>
+                                <div id="historyActions" class="mt-2 text-end" style="display: none;">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" id="clearHistoryBtn">
+                                        <i class="bi bi-trash me-1"></i>清空历史
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// 加载提醒数据
+// ============ 生日祝福生成相关变量 ============
+let currentGreetingCustomerId = null;
+let currentGreetingCustomerName = '';
+let birthdayGreetingModal = null;
+
+// ============ 加载提醒数据 ============
 async function loadReminders() {
     try {
         const response = await fetch('/api/dashboard/reminders');
@@ -270,23 +370,34 @@ async function loadReminders() {
             remindersContainer.innerHTML = '<p class="text-muted text-center py-3">暂无待办事项 ✓</p>';
         }
         
-        // 渲染生日提醒
+        // 渲染生日提醒（带生成祝福按钮）
         const birthdaysContainer = document.getElementById('birthdays-container');
         if (data.birthdays.length > 0) {
             let html = '';
             data.birthdays.forEach(item => {
                 html += `
-                    <div class="list-tile">
-                        <span class="icon bg-info text-white"><i class="bi bi-gift"></i></span>
-                        <div>
-                            <a href="/customers/${item.customer_id}" class="text-decoration-none fw-semibold">
-                                ${item.customer_name}
-                            </a>
-                            <div><small class="text-info">${item.message}</small></div>
+                    <div class="list-tile d-flex justify-content-between align-items-start">
+                        <div class="d-flex gap-2">
+                            <span class="icon bg-info text-white"><i class="bi bi-gift"></i></span>
+                            <div>
+                                <a href="/customers/${item.customer_id}" class="text-decoration-none fw-semibold">
+                                    ${item.customer_name}
+                                </a>
+                                <div><small class="text-info">${item.message}</small></div>
+                            </div>
                         </div>
+                        <button class="btn btn-sm btn-outline-info generate-greeting-btn" 
+                                data-customer-id="${item.customer_id}" 
+                                data-customer-name="${item.customer_name}"
+                                title="生成 AI 祝福语">
+                            <i class="bi bi-magic"></i> 生成祝福
+                        </button>
                     </div>`;
             });
             birthdaysContainer.innerHTML = html;
+            
+            // 绑定生成祝福按钮事件
+            bindGreetingButtons();
         } else {
             birthdaysContainer.innerHTML = '<p class="text-muted text-center py-3">近期无客户生日</p>';
         }
@@ -298,8 +409,357 @@ async function loadReminders() {
     }
 }
 
-// 页面加载时获取提醒
-document.addEventListener('DOMContentLoaded', loadReminders);
+// ============ 生日祝福生成功能 ============
+
+// 绑定生成祝福按钮事件
+function bindGreetingButtons() {
+    document.querySelectorAll('.generate-greeting-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            currentGreetingCustomerId = parseInt(this.dataset.customerId);
+            currentGreetingCustomerName = this.dataset.customerName;
+            openGreetingModal();
+        });
+    });
+}
+
+// 打开生成祝福 Modal
+function openGreetingModal() {
+    // 重置状态
+    document.getElementById('greetingCustomerName').textContent = currentGreetingCustomerName;
+    document.getElementById('greetingStyle').value = '商务专业';
+    document.getElementById('greetingResultArea').style.display = 'none';
+    document.getElementById('greetingLoading').style.display = 'none';
+    document.getElementById('greetingError').style.display = 'none';
+    document.getElementById('greetingResult').textContent = '';
+    document.getElementById('copySuccess').style.display = 'none';
+    
+    // 加载历史记录
+    loadGreetingHistory();
+    
+    // 显示 Modal
+    if (!birthdayGreetingModal) {
+        birthdayGreetingModal = new bootstrap.Modal(document.getElementById('birthdayGreetingModal'));
+    }
+    birthdayGreetingModal.show();
+}
+
+// 生成祝福 - 流式输出版本
+async function generateGreeting() {
+    const style = document.getElementById('greetingStyle').value;
+    
+    // 重置状态
+    document.getElementById('greetingLoading').style.display = 'block';
+    document.getElementById('greetingResultArea').style.display = 'block';
+    document.getElementById('greetingResult').textContent = '';
+    document.getElementById('greetingError').style.display = 'none';
+    document.getElementById('generateGreetingBtn').disabled = true;
+    document.getElementById('greetingStatusText').textContent = 'AI 正在生成祝福语...';
+    
+    // 添加流式光标效果
+    const resultElement = document.getElementById('greetingResult');
+    resultElement.classList.add('streaming-cursor');
+    
+    let accumulatedContent = '';
+    
+    try {
+        // 使用 fetch 处理 SSE 流
+        const response = await fetch('/api/ai/generate-birthday-greeting/stream', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'text/event-stream'
+            },
+            body: JSON.stringify({
+                customer_id: currentGreetingCustomerId,
+                style: style
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) {
+                console.log('流式传输完成');
+                break;
+            }
+            
+            buffer += decoder.decode(value, { stream: true });
+            
+            // 按行处理 SSE 数据
+            while (buffer.includes('\n')) {
+                const newlineIndex = buffer.indexOf('\n');
+                const line = buffer.slice(0, newlineIndex).trim();
+                buffer = buffer.slice(newlineIndex + 1);
+                
+                if (line.startsWith('data: ')) {
+                    const dataStr = line.slice(6);
+                    if (!dataStr || dataStr === '[DONE]') continue;
+                    
+                    try {
+                        const data = JSON.parse(dataStr);
+                        
+                        if (data.type === 'content' && data.content) {
+                            // 追加内容
+                            accumulatedContent += data.content;
+                            resultElement.textContent = accumulatedContent;
+                            // 滚动到底部
+                            resultElement.scrollTop = resultElement.scrollHeight;
+                        } else if (data.type === 'done') {
+                            // 完成
+                            console.log('祝福语生成完成');
+                            resultElement.classList.remove('streaming-cursor');
+                            document.getElementById('greetingLoading').style.display = 'none';
+                            // 如果有完整内容，使用完整内容
+                            if (data.full_content) {
+                                resultElement.textContent = data.full_content;
+                                accumulatedContent = data.full_content;
+                            }
+                            // 保存到历史记录
+                            if (accumulatedContent) {
+                                saveGreetingToHistory(style, accumulatedContent);
+                            }
+                        } else if (data.type === 'error') {
+                            // 错误
+                            console.error('生成错误:', data.message);
+                            resultElement.classList.remove('streaming-cursor');
+                            document.getElementById('greetingError').textContent = data.message || '生成失败，请重试';
+                            document.getElementById('greetingError').style.display = 'block';
+                            if (!accumulatedContent) {
+                                document.getElementById('greetingResultArea').style.display = 'none';
+                            }
+                        }
+                    } catch (parseError) {
+                        console.warn('解析 SSE 数据失败:', dataStr);
+                    }
+                }
+            }
+        }
+        
+        // 确保移除光标效果
+        resultElement.classList.remove('streaming-cursor');
+        
+    } catch (error) {
+        console.error('生成祝福失败:', error);
+        resultElement.classList.remove('streaming-cursor');
+        document.getElementById('greetingError').textContent = '网络错误，请检查连接后重试';
+        document.getElementById('greetingError').style.display = 'block';
+        if (!accumulatedContent) {
+            document.getElementById('greetingResultArea').style.display = 'none';
+        }
+    } finally {
+        document.getElementById('greetingLoading').style.display = 'none';
+        document.getElementById('generateGreetingBtn').disabled = false;
+    }
+}
+
+// 复制到剪贴板
+async function copyGreeting() {
+    const greeting = document.getElementById('greetingResult').textContent;
+    
+    try {
+        // 优先使用现代 API
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(greeting);
+        } else {
+            // 降级方案
+            const textarea = document.createElement('textarea');
+            textarea.value = greeting;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+        
+        // 显示成功提示
+        document.getElementById('copySuccess').style.display = 'inline';
+        setTimeout(() => {
+            document.getElementById('copySuccess').style.display = 'none';
+        }, 2000);
+        
+    } catch (error) {
+        console.error('复制失败:', error);
+        alert('复制失败，请手动选择文本复制');
+    }
+}
+
+// ============ 祝福历史记录管理 ============
+const MAX_HISTORY_ITEMS = 10;
+
+function getHistoryStorageKey() {
+    return `birthday_greetings_history_${currentGreetingCustomerId}`;
+}
+
+// 获取历史记录
+function getGreetingHistory() {
+    try {
+        const data = localStorage.getItem(getHistoryStorageKey());
+        return data ? JSON.parse(data) : [];
+    } catch (e) {
+        console.error('读取历史记录失败:', e);
+        return [];
+    }
+}
+
+// 保存祝福到历史
+function saveGreetingToHistory(style, content) {
+    const history = getGreetingHistory();
+    const newItem = {
+        id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        style: style,
+        content: content,
+        timestamp: Date.now()
+    };
+    
+    history.unshift(newItem);
+    
+    if (history.length > MAX_HISTORY_ITEMS) {
+        history.pop();
+    }
+    
+    try {
+        localStorage.setItem(getHistoryStorageKey(), JSON.stringify(history));
+        console.log('祝福已保存到历史记录');
+        loadGreetingHistory();
+    } catch (e) {
+        console.error('保存历史记录失败:', e);
+    }
+}
+
+// 加载并显示历史记录
+function loadGreetingHistory() {
+    const history = getGreetingHistory();
+    const listContainer = document.getElementById('greetingHistoryList');
+    const countBadge = document.getElementById('historyCount');
+    const actionsDiv = document.getElementById('historyActions');
+    
+    countBadge.textContent = history.length;
+    
+    if (history.length === 0) {
+        listContainer.innerHTML = '<p class="text-muted text-center py-2 mb-0">暂无历史记录</p>';
+        actionsDiv.style.display = 'none';
+        return;
+    }
+    
+    actionsDiv.style.display = 'block';
+    
+    let html = '';
+    history.forEach(item => {
+        const date = new Date(item.timestamp);
+        const timeStr = date.toLocaleString('zh-CN', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        const snippet = item.content.length > 60 ? item.content.substring(0, 60) + '...' : item.content;
+        
+        html += `
+            <div class="list-group-item list-group-item-action p-2" data-history-id="${item.id}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1" style="cursor: pointer;" onclick="useHistoryGreeting('${item.id}')">
+                        <div class="d-flex gap-2 mb-1">
+                            <span class="badge bg-info">${item.style}</span>
+                            <small class="text-muted">${timeStr}</small>
+                        </div>
+                        <p class="mb-0 small text-muted" style="white-space: pre-wrap;">${snippet}</p>
+                    </div>
+                    <div class="btn-group btn-group-sm ms-2">
+                        <button type="button" class="btn btn-outline-success btn-sm" onclick="copyHistoryGreeting('${item.id}')" title="复制">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteHistoryGreeting('${item.id}')" title="删除">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    listContainer.innerHTML = html;
+}
+
+// 使用历史祝福
+function useHistoryGreeting(id) {
+    const history = getGreetingHistory();
+    const item = history.find(h => h.id === id);
+    if (item) {
+        document.getElementById('greetingResult').textContent = item.content;
+        document.getElementById('greetingResultArea').style.display = 'block';
+        document.getElementById('greetingStyle').value = item.style;
+    }
+}
+
+// 复制历史祝福
+async function copyHistoryGreeting(id) {
+    const history = getGreetingHistory();
+    const item = history.find(h => h.id === id);
+    if (!item) return;
+    
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(item.content);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = item.content;
+            textarea.style.position = 'fixed';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textarea);
+        }
+        const btn = document.querySelector(`[data-history-id="${id}"] .btn-outline-success`);
+        if (btn) {
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '<i class="bi bi-check"></i>';
+            setTimeout(() => { btn.innerHTML = originalHTML; }, 1500);
+        }
+    } catch (e) {
+        console.error('复制失败:', e);
+    }
+}
+
+// 删除单条历史
+function deleteHistoryGreeting(id) {
+    let history = getGreetingHistory();
+    history = history.filter(h => h.id !== id);
+    localStorage.setItem(getHistoryStorageKey(), JSON.stringify(history));
+    loadGreetingHistory();
+}
+
+// 清空所有历史
+function clearAllHistory() {
+    if (confirm('确定要清空所有历史记录吗？')) {
+        localStorage.removeItem(getHistoryStorageKey());
+        loadGreetingHistory();
+    }
+}
+
+// ============ 初始化 ============
+document.addEventListener('DOMContentLoaded', function() {
+    // 加载提醒数据
+    loadReminders();
+    
+    // 绑定生成按钮事件
+    document.getElementById('generateGreetingBtn').addEventListener('click', generateGreeting);
+    
+    // 绑定复制按钮事件
+    document.getElementById('copyGreetingBtn').addEventListener('click', copyGreeting);
+    
+    // 绑定清空历史按钮事件
+    document.getElementById('clearHistoryBtn').addEventListener('click', clearAllHistory);
+});
 </script>
 {% endblock %}
 

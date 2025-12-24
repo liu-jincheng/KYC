@@ -11,7 +11,7 @@ import markdown
 from app.config import settings
 from app.database import init_db, get_db, SessionLocal
 from app.models import Customer, FormTemplate, CustomerStatus
-from app.routers import customers, forms, analyze, dashboard
+from app.routers import customers, forms, analyze, dashboard, ai
 
 
 @asynccontextmanager
@@ -43,6 +43,7 @@ app.include_router(customers.router, prefix="/api/customers", tags=["customers"]
 app.include_router(forms.router, prefix="/api/forms", tags=["forms"])
 app.include_router(analyze.router, prefix="/api/analyze", tags=["analyze"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 
 
 # Jinja2 自定义过滤器

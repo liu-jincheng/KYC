@@ -638,3 +638,392 @@ def _generate_mock_analysis(
         "opportunities": opportunities
     }
 
+
+# ============ 生日祝福工作流 ============
+
+async def generate_birthday_greeting_via_coze(
+    name: str,
+    birthday_date: str,
+    job_type: str = "",
+    job_title: str = "",
+    style: str = "商务专业"
+) -> str:
+    """
+    调用 Coze 生日祝福工作流生成个性化祝福语
+    
+    Args:
+        name: 客户姓名
+        birthday_date: 生日日期 (YYYY-MM-DD)
+        job_type: 职业类型
+        job_title: 职位/职称
+        style: 祝福风格 (商务专业/温馨亲切/幽默风趣/长辈尊享)
+    
+    Returns:
+        生成的祝福语文本
+    """
+    # 如果未配置 Coze API 或生日工作流 ID，返回模拟祝福
+    if not settings.COZE_API_KEY or not settings.COZE_BIRTHDAY_WORKFLOW_ID:
+        logger.info("未配置 Coze 生日工作流，使用模拟祝福")
+        return _generate_mock_birthday_greeting(name, birthday_date, job_type, job_title, style)
+    
+    # 构建请求参数 - 直接传入5个独立的 Object 类型参数
+    # Coze Workflow 期望的参数: name, job_title, job_type, style, birthday_date (都是 Object 类型)
+    # 根据 Coze Object 类型要求，将每个值包装成一个对象
+    workflow_input = {
+        "name": {"value": name},
+        "job_title": {"value": job_title} if job_title else {"value": ""},
+        "job_type": {"value": job_type} if job_type else {"value": ""},
+        "style": {"value": style},
+        "birthday_date": {"value": birthday_date}
+    }
+    
+    request_url = f"{settings.COZE_API_BASE_URL}/workflow/run"
+    request_body = {
+        "workflow_id": settings.COZE_BIRTHDAY_WORKFLOW_ID,
+        "parameters": workflow_input
+    }
+    
+    print("\n" + "="*60)
+    print("🎂 [COZE API] 发送生日祝福请求")
+    print("="*60)
+    print(f"📍 请求地址: {request_url}")
+    print(f"📋 Workflow ID: {settings.COZE_BIRTHDAY_WORKFLOW_ID}")
+    print(f"📦 发送参数 (parameters):")
+    print(json.dumps(workflow_input, ensure_ascii=False, indent=2))
+    print("-"*60)
+    
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                request_url,
+                headers={
+                    "Authorization": f"Bearer {settings.COZE_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json=request_body
+            )
+            
+            print(f"📊 响应状态码: {response.status_code}")
+            
+            raw_text = response.text
+            print(f"📄 响应体:")
+            print("-"*40)
+            try:
+                formatted = json.dumps(json.loads(raw_text), ensure_ascii=False, indent=2)
+                print(formatted[:1000])
+            except:
+                print(raw_text[:1000])
+            print("-"*40)
+            
+            response.raise_for_status()
+            
+            result = response.json()
+            greeting = _parse_birthday_greeting_response(result)
+            
+            print(f"✅ 解析成功，祝福语长度: {len(greeting)} 字符")
+            print("="*60 + "\n")
+            
+            return greeting
+            
+    except httpx.TimeoutException:
+        logger.error("Coze 生日工作流请求超时")
+        print("❌ 请求超时")
+        raise Exception("Coze 生日工作流请求超时，请稍后重试")
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Coze 生日工作流 HTTP 错误: {e.response.status_code}")
+        print(f"❌ HTTP 错误: {e.response.status_code}")
+        raise Exception(f"Coze 生日工作流 HTTP 错误: {e.response.status_code}")
+    except Exception as e:
+        logger.error(f"Coze 生日工作流异常: {str(e)}")
+        print(f"❌ API 异常: {str(e)}")
+        raise
+
+
+def _parse_birthday_greeting_response(result: dict) -> str:
+    """
+    解析 Coze 生日祝福工作流返回结果
+    
+    兼容多种返回格式，优先提取 greeting/content/data 字段
+    """
+    # 检查错误码
+    code = result.get("code", 0)
+    if code != 0:
+        error_msg = result.get("msg", result.get("message", "未知错误"))
+        raise Exception(f"Coze API 错误: {error_msg}")
+    
+    data = result.get("data")
+    
+    # data 为空时尝试其他字段
+    if data is None:
+        if "greeting" in result:
+            return result["greeting"]
+        if "content" in result:
+            return result["content"]
+        if "output" in result:
+            return str(result["output"])
+        return ""
+    
+    # data 是字符串
+    if isinstance(data, str):
+        # 尝试解析 JSON
+        try:
+            parsed = json.loads(data)
+            if isinstance(parsed, dict):
+                return parsed.get("greeting", parsed.get("content", parsed.get("data", data)))
+            return str(parsed)
+        except json.JSONDecodeError:
+            return data
+    
+    # data 是字典
+    if isinstance(data, dict):
+        # 尝试多种字段名
+        for key in ["greeting", "content", "data", "output", "text", "message"]:
+            if key in data:
+                val = data[key]
+                if isinstance(val, str):
+                    return val
+                if isinstance(val, dict):
+                    # 递归提取
+                    for inner_key in ["greeting", "content", "data", "text"]:
+                        if inner_key in val:
+                            return str(val[inner_key])
+        # 兜底
+        return str(data)
+    
+    return str(data) if data else ""
+
+
+async def generate_birthday_greeting_stream(
+    name: str,
+    birthday_date: str,
+    job_type: str = "",
+    job_title: str = "",
+    style: str = "商务专业"
+) -> AsyncGenerator[str, None]:
+    """
+    调用 Coze 生日祝福工作流生成个性化祝福语 - 流式输出版本
+    
+    使用 SSE (Server-Sent Events) 格式返回流式数据
+    
+    Args:
+        name: 客户姓名
+        birthday_date: 生日日期 (YYYY-MM-DD)
+        job_type: 职业类型
+        job_title: 职位/职称
+        style: 祝福风格
+    
+    Yields:
+        SSE 格式的流式数据块
+    """
+    # 如果未配置 Coze API 或生日工作流 ID，返回错误
+    if not settings.COZE_API_KEY or not settings.COZE_BIRTHDAY_WORKFLOW_ID:
+        logger.error("未配置 Coze 生日工作流")
+        yield f"data: {json.dumps({'type': 'error', 'message': '未配置 Coze 生日工作流'}, ensure_ascii=False)}\n\n"
+        return
+    
+    # 构建请求参数 - 与非流式版本相同的格式
+    workflow_input = {
+        "name": {"value": name},
+        "job_title": {"value": job_title} if job_title else {"value": ""},
+        "job_type": {"value": job_type} if job_type else {"value": ""},
+        "style": {"value": style},
+        "birthday_date": {"value": birthday_date}
+    }
+    
+    # 使用流式 API 端点
+    request_url = f"{settings.COZE_API_BASE_URL}/workflow/stream_run"
+    request_body = {
+        "workflow_id": settings.COZE_BIRTHDAY_WORKFLOW_ID,
+        "parameters": workflow_input
+    }
+    
+    print("\n" + "="*60)
+    print("🎂 [COZE API] 发送生日祝福流式请求")
+    print("="*60)
+    print(f"📍 请求地址: {request_url}")
+    print(f"📋 Workflow ID: {settings.COZE_BIRTHDAY_WORKFLOW_ID}")
+    print(f"📦 发送参数 (parameters):")
+    print(json.dumps(workflow_input, ensure_ascii=False, indent=2))
+    print("-"*60)
+    
+    accumulated_content = ""
+    
+    try:
+        async with httpx.AsyncClient(timeout=180.0) as client:
+            async with client.stream(
+                "POST",
+                request_url,
+                headers={
+                    "Authorization": f"Bearer {settings.COZE_API_KEY}",
+                    "Content-Type": "application/json",
+                    "Accept": "text/event-stream"
+                },
+                json=request_body
+            ) as response:
+                print(f"📊 流式响应状态码: {response.status_code}")
+                
+                if response.status_code != 200:
+                    error_text = await response.aread()
+                    error_msg = f"API错误: {response.status_code}"
+                    print(f"❌ 流式请求失败: {error_text.decode()}")
+                    yield f"data: {json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False)}\n\n"
+                    return
+                
+                # 处理 SSE 流
+                buffer = ""
+                async for chunk in response.aiter_text():
+                    buffer += chunk
+                    
+                    # 按行处理 SSE 数据
+                    while "\n" in buffer:
+                        line, buffer = buffer.split("\n", 1)
+                        line = line.strip()
+                        
+                        if not line:
+                            continue
+                        
+                        # 处理 SSE 数据行
+                        if line.startswith("data:"):
+                            data_str = line[5:].strip()
+                            if not data_str or data_str == "[DONE]":
+                                continue
+                            
+                            try:
+                                data = json.loads(data_str)
+                                event_type = data.get("event", data.get("type", ""))
+                                
+                                # 处理不同类型的事件
+                                if event_type == "Message":
+                                    message_data = data.get("data", data.get("message", {}))
+                                    if isinstance(message_data, str):
+                                        try:
+                                            message_data = json.loads(message_data)
+                                        except:
+                                            pass
+                                    
+                                    content = ""
+                                    if isinstance(message_data, dict):
+                                        content = message_data.get("content", message_data.get("data", ""))
+                                    elif isinstance(message_data, str):
+                                        content = message_data
+                                    
+                                    if content:
+                                        accumulated_content += content
+                                        yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                                
+                                elif event_type in ["Output", "output"]:
+                                    output_data = data.get("data", data.get("output", ""))
+                                    if isinstance(output_data, str):
+                                        try:
+                                            output_data = json.loads(output_data)
+                                        except:
+                                            pass
+                                    
+                                    content = ""
+                                    if isinstance(output_data, dict):
+                                        content = output_data.get("data", output_data.get("content", output_data.get("output", "")))
+                                    elif isinstance(output_data, str):
+                                        content = output_data
+                                    
+                                    if content:
+                                        accumulated_content += content
+                                        yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                                
+                                elif event_type in ["Done", "done", "Completed", "completed"]:
+                                    print("✅ 流式输出完成")
+                                    yield f"data: {json.dumps({'type': 'done'}, ensure_ascii=False)}\n\n"
+                                
+                                elif event_type in ["Error", "error"]:
+                                    error_msg = data.get("message", data.get("error", "未知错误"))
+                                    print(f"❌ 错误事件: {error_msg}")
+                                    yield f"data: {json.dumps({'type': 'error', 'message': error_msg}, ensure_ascii=False)}\n\n"
+                                
+                                else:
+                                    # 其他事件，尝试提取内容
+                                    content = data.get("content", data.get("data", ""))
+                                    if isinstance(content, str) and content:
+                                        accumulated_content += content
+                                        yield f"data: {json.dumps({'type': 'content', 'content': content}, ensure_ascii=False)}\n\n"
+                            
+                            except json.JSONDecodeError:
+                                # 直接作为文本内容输出
+                                if data_str and data_str != "[DONE]":
+                                    accumulated_content += data_str
+                                    yield f"data: {json.dumps({'type': 'content', 'content': data_str}, ensure_ascii=False)}\n\n"
+                
+                # 发送最终完成事件
+                print(f"📝 总共接收内容长度: {len(accumulated_content)} 字符")
+                yield f"data: {json.dumps({'type': 'done', 'full_content': accumulated_content}, ensure_ascii=False)}\n\n"
+                
+    except httpx.TimeoutException as e:
+        print(f"❌ 流式请求超时: {str(e)}")
+        yield f"data: {json.dumps({'type': 'error', 'message': '请求超时，请稍后重试'}, ensure_ascii=False)}\n\n"
+    except Exception as e:
+        print(f"❌ 流式请求异常: {type(e).__name__}: {str(e)}")
+        yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+
+
+def _generate_mock_birthday_greeting(
+    name: str,
+    birthday_date: str,
+    job_type: str,
+    job_title: str,
+    style: str
+) -> str:
+    """
+    生成模拟生日祝福（未配置 Coze API 时使用）
+    """
+    # 根据风格生成不同模板
+    templates = {
+        "商务专业": f"""尊敬的{name}先生/女士：
+
+值此生辰之际，谨代表侨慧团队向您致以最诚挚的祝福！
+
+感谢您一直以来对我们的信任与支持。愿新的一岁，您的事业蒸蒸日上，身体健康，阖家幸福！
+
+期待在未来的日子里，继续为您提供专业、贴心的服务。
+
+祝：生日快乐！万事如意！
+
+——侨慧·本地CRM""",
+
+        "温馨亲切": f"""亲爱的{name}：
+
+🎂 生日快乐！
+
+今天是属于您的特别日子！愿这一年里，所有的美好都与您相伴，所有的梦想都能实现。
+
+感谢您对我们的信任，能够成为您的朋友，是我们的荣幸。
+
+愿您生日愉快，天天开心！🎉
+
+——您的朋友""",
+
+        "幽默风趣": f"""Hi {name}！
+
+听说今天有个人要"长大"一岁了？别担心，年龄只是个数字，心态年轻才是真的年轻！😄
+
+祝你生日快乐！继续保持那股冲劲儿，今年的小目标：赚它一个亿（的快乐）！
+
+记得今天多吃点蛋糕，反正热量不算数！🎂
+
+生日快乐！ 🎊""",
+
+        "长辈尊享": f"""尊敬的{name}先生/女士：
+
+恭祝您福寿安康，生辰愉快！
+
+岁月如歌，您的智慧与阅历令人敬佩。值此吉日，衷心祝愿您：
+
+福如东海长流水，
+寿比南山不老松。
+
+愿您身体康健、心情舒畅、阖家团圆、幸福美满！
+
+谨致崇高的敬意与美好的祝福！
+
+——侨慧团队 敬上"""
+    }
+    
+    return templates.get(style, templates["商务专业"])
+

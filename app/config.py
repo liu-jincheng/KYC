@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # Coze API 配置
     COZE_API_KEY: str = ""
     COZE_WORKFLOW_ID: str = ""
+    COZE_BIRTHDAY_WORKFLOW_ID: str = ""  # 生日祝福工作流 ID
     COZE_API_BASE_URL: str = "https://api.coze.cn/v1"
     
     class Config:
