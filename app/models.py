@@ -1,10 +1,18 @@
 """
 数据库模型定义
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, Date, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, Date, JSON, ForeignKey
 from sqlalchemy.sql import func
 from app.database import Base
 import enum
+import secrets
+import hashlib
+
+
+class UserRole(str, enum.Enum):
+    """用户角色枚举"""
+    ADMIN = "admin"      # 管理员：可看全部客户，可管理用户
+    USER = "user"        # 用户（顾问）：只能看自己的客户
 
 
 class CustomerStatus(str, enum.Enum):
@@ -14,6 +22,38 @@ class CustomerStatus(str, enum.Enum):
     REPORTED = "已出方案"
     FOLLOWING = "跟进中"
     SIGNED = "已签约"
+
+
+class User(Base):
+    """
+    用户表 - 存储系统用户（管理员和顾问）
+    """
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, nullable=False, index=True)  # 用户名
+    password_hash = Column(String(128), nullable=False)                      # 密码哈希
+    display_name = Column(String(100), nullable=True)                        # 显示名称
+    role = Column(String(20), default=UserRole.USER.value)                   # 角色
+    is_active = Column(Integer, default=1)                                   # 是否启用
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+    
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """对密码进行哈希处理"""
+        # 使用 SHA-256 + 固定盐值（生产环境建议使用 bcrypt）
+        salt = "kyc_crm_salt_2024"
+        return hashlib.sha256(f"{salt}{password}".encode()).hexdigest()
+    
+    def verify_password(self, password: str) -> bool:
+        """验证密码"""
+        return self.password_hash == self.hash_password(password)
+    
+    @property
+    def is_admin(self) -> bool:
+        """是否为管理员"""
+        return self.role == UserRole.ADMIN.value
 
 
 class FormTemplate(Base):
@@ -51,13 +91,37 @@ class Customer(Base):
     related_contacts = Column(JSON, nullable=True)              # 关联人信息
     next_follow_up = Column(Date, nullable=True)                # 下次跟进日期
     
+    # 客户归属：关联到负责的顾问用户
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
 
 
+class FormInvite(Base):
+    """
+    表单填写邀请表 - 存储发送给客户的填写链接
+    """
+    __tablename__ = "form_invites"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)  # 关联客户
+    token = Column(String(64), unique=True, nullable=False, index=True)        # 访问令牌
+    expires_at = Column(DateTime, nullable=True)                                # 过期时间
+    is_active = Column(Integer, default=1)                                      # 是否有效
+    used_at = Column(DateTime, nullable=True)                                   # 使用时间
+    created_by_user_id = Column(Integer, nullable=True)                         # 创建者用户ID（后续关联）
+    created_at = Column(DateTime, server_default=func.now())
+    
+    @staticmethod
+    def generate_token() -> str:
+        """生成安全的随机令牌"""
+        return secrets.token_urlsafe(32)
+
+
 # 默认表单配置结构
 DEFAULT_FORM_SCHEMA = {
-    "version": "1.0",
+    "version": "1.1",
     "sections": [
         {
             "title": "客户来源",
@@ -85,9 +149,23 @@ DEFAULT_FORM_SCHEMA = {
                 },
                 {
                     "name": "education",
-                    "label": "学历",
+                    "label": "最高学历",
                     "type": "select",
                     "options": ["高中及以下", "本科", "硕士", "博士", "其他"],
+                    "required": False
+                },
+                {
+                    "name": "first_education",
+                    "label": "第一学历",
+                    "type": "select",
+                    "options": ["高中及以下", "大专", "本科", "其他"],
+                    "required": False
+                },
+                {
+                    "name": "education_certifications",
+                    "label": "学历认证",
+                    "type": "multiselect",
+                    "options": ["学信网", "海牙认证", "VQ认证（香港官方）"],
                     "required": False
                 }
             ]
@@ -110,9 +188,27 @@ DEFAULT_FORM_SCHEMA = {
             "fields": [
                 {
                     "name": "asset_level",
-                    "label": "资产级别",
+                    "label": "资产规模",
                     "type": "select",
-                    "options": ["A8 (百万级)", "A9 (千万级)", "A10 (亿级)", "A11 (十亿级)"],
+                    "options": ["100万以下", "100-500万", "500-2000万", "2000万-1亿", "1亿以上"],
+                    "required": False
+                },
+                {
+                    "name": "industry_category",
+                    "label": "所属行业",
+                    "type": "select",
+                    "options": [
+                        "商业贸易",
+                        "制造业",
+                        "房地产/建筑",
+                        "金融/投资",
+                        "互联网/软件/IT",
+                        "教育/培训",
+                        "医疗/健康",
+                        "专业服务（法律/咨询/会计）",
+                        "文化传媒/娱乐",
+                        "其他"
+                    ],
                     "required": False
                 },
                 {
@@ -123,6 +219,18 @@ DEFAULT_FORM_SCHEMA = {
                     "required": False
                 },
                 {"name": "job_title", "label": "职位/职称", "type": "text", "required": False}
+            ]
+        },
+        {
+            "title": "移民条件",
+            "fields": [
+                {
+                    "name": "residency_requirement",
+                    "label": "可满足居住要求",
+                    "type": "select",
+                    "options": ["可满足≥300天/年", "可满足≥180天/年", "仅能满足<180天/年", "不确定"],
+                    "required": False
+                }
             ]
         },
         {

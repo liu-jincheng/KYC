@@ -25,6 +25,7 @@ class CustomerCreate(BaseModel):
     related_contacts: Optional[List[dict]] = Field(default=None, description="关联人信息")
     next_follow_up: Optional[dt_date] = Field(default=None, description="下次跟进日期")
     birthday: Optional[dt_date] = Field(default=None, description="生日")
+    owner_user_id: Optional[int] = Field(default=None, description="归属顾问用户ID")
 
 
 class CustomerUpdate(BaseModel):
@@ -34,6 +35,7 @@ class CustomerUpdate(BaseModel):
     related_contacts: Optional[List[dict]] = None
     next_follow_up: Optional[dt_date] = None
     birthday: Optional[dt_date] = None
+    owner_user_id: Optional[int] = None
 
 
 class CustomerStatusUpdate(BaseModel):
@@ -57,6 +59,7 @@ class CustomerResponse(BaseModel):
     birthday: Optional[dt_date] = None
     related_contacts: Optional[List[dict]] = None
     next_follow_up: Optional[dt_date] = None
+    owner_user_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -164,4 +167,95 @@ class DashboardReminders(BaseModel):
     follow_ups: List[ReminderItem]
     birthdays: List[ReminderItem]
     stale_analyses: List[ReminderItem]
+
+
+# ============ 表单邀请相关 Schema ============
+
+class InviteCreate(BaseModel):
+    """创建邀请链接请求"""
+    customer_id: int = Field(..., description="客户ID")
+    expires_days: Optional[int] = Field(default=7, description="过期天数，默认7天")
+
+
+class InviteResponse(BaseModel):
+    """邀请链接响应"""
+    id: int
+    customer_id: int
+    token: str
+    expires_at: Optional[datetime] = None
+    is_active: int
+    used_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    invite_url: Optional[str] = None  # 完整的邀请链接
+
+    class Config:
+        from_attributes = True
+
+
+class InviteFormData(BaseModel):
+    """客户提交的表单数据"""
+    kyc_data: dict = Field(..., description="KYC表单数据")
+
+
+class InviteValidateResponse(BaseModel):
+    """验证邀请链接响应"""
+    valid: bool
+    message: str
+    customer_name: Optional[str] = None
+    form_schema: Optional[dict] = None
+
+
+# ============ 用户与权限相关 Schema ============
+
+class UserRoleEnum(str, Enum):
+    """用户角色枚举"""
+    ADMIN = "admin"
+    USER = "user"
+
+
+class UserCreate(BaseModel):
+    """创建用户请求"""
+    username: str = Field(..., min_length=2, max_length=50, description="用户名")
+    password: str = Field(..., min_length=6, max_length=100, description="密码")
+    display_name: Optional[str] = Field(None, max_length=100, description="显示名称")
+    role: UserRoleEnum = Field(default=UserRoleEnum.USER, description="角色")
+
+
+class UserUpdate(BaseModel):
+    """更新用户请求"""
+    display_name: Optional[str] = Field(None, max_length=100)
+    role: Optional[UserRoleEnum] = None
+    is_active: Optional[int] = None
+
+
+class UserPasswordUpdate(BaseModel):
+    """更新用户密码请求"""
+    old_password: str = Field(..., description="旧密码")
+    new_password: str = Field(..., min_length=6, max_length=100, description="新密码")
+
+
+class UserResponse(BaseModel):
+    """用户响应"""
+    id: int
+    username: str
+    display_name: Optional[str] = None
+    role: str
+    is_active: int
+    created_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class LoginRequest(BaseModel):
+    """登录请求"""
+    username: str = Field(..., description="用户名")
+    password: str = Field(..., description="密码")
+
+
+class LoginResponse(BaseModel):
+    """登录响应"""
+    success: bool
+    message: str
+    user: Optional[UserResponse] = None
 

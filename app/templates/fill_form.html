@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }} - 侨慧·KYC表单</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Favicon -->
+    <link rel="icon" href="/static/favicon.ico">
+    
+    <style>
+        * {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+        }
+        
+        body {
+            background: #f5f5f7;
+            min-height: 100vh;
+            position: relative;
+        }
+        
+        /* 装饰性渐变 */
+        .bg-decoration {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.5;
+            z-index: 0;
+            pointer-events: none;
+        }
+        
+        .bg-decoration-1 {
+            width: 600px;
+            height: 600px;
+            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+            top: -200px;
+            right: -150px;
+        }
+        
+        .bg-decoration-2 {
+            width: 400px;
+            height: 400px;
+            background: linear-gradient(135deg, #d299c2 0%, #fef9d7 100%);
+            bottom: -100px;
+            left: -100px;
+            opacity: 0.3;
+        }
+        
+        .form-container {
+            max-width: 720px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .form-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+        
+        .form-header {
+            padding: 2.5rem 2rem 2rem;
+            text-align: center;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+        
+        .form-header-icon {
+            width: 64px;
+            height: 64px;
+            background: linear-gradient(135deg, #1d1d1f 0%, #424245 100%);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        .form-header-icon i {
+            font-size: 1.75rem;
+            color: white;
+        }
+        
+        .form-header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+        
+        .form-header p {
+            color: #86868b;
+            margin: 0;
+        }
+        
+        .form-body {
+            padding: 2rem;
+        }
+        
+        .section-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #86868b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        }
+        
+        .form-label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #1d1d1f;
+            margin-bottom: 0.5rem;
+        }
+        
+        .form-control, .form-select {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #d2d2d7;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            font-size: 0.9375rem;
+            transition: all 0.2s ease;
+        }
+        
+        .form-control:focus, .form-select:focus {
+            background: #fff;
+            border-color: #0071e3;
+            box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.1);
+        }
+        
+        .form-control::placeholder {
+            color: #86868b;
+        }
+        
+        .multiselect-container {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid #d2d2d7;
+            border-radius: 10px;
+            padding: 0.75rem;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+        
+        .form-check {
+            padding: 0.5rem 0.75rem;
+            margin: 0;
+            border-radius: 8px;
+            transition: background 0.15s ease;
+        }
+        
+        .form-check:hover {
+            background: rgba(0, 0, 0, 0.03);
+        }
+        
+        .form-check-input {
+            border-color: #d2d2d7;
+            margin-top: 0.2rem;
+        }
+        
+        .form-check-input:checked {
+            background-color: #1d1d1f;
+            border-color: #1d1d1f;
+        }
+        
+        .form-check-input:focus {
+            box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+        }
+        
+        .privacy-box {
+            background: rgba(0, 0, 0, 0.02);
+            border: 1px solid rgba(0, 0, 0, 0.06);
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .privacy-box a {
+            color: #0071e3;
+            text-decoration: none;
+        }
+        
+        .privacy-box a:hover {
+            text-decoration: underline;
+        }
+        
+        .btn-submit {
+            background: #1d1d1f;
+            border: none;
+            border-radius: 12px;
+            padding: 1rem 2rem;
+            font-size: 1rem;
+            font-weight: 500;
+            color: #fff;
+            width: 100%;
+            transition: all 0.2s ease;
+        }
+        
+        .btn-submit:hover {
+            background: #424245;
+            transform: translateY(-1px);
+        }
+        
+        .btn-submit:active {
+            transform: translateY(0);
+        }
+        
+        .btn-submit:disabled {
+            background: #86868b;
+            transform: none;
+        }
+        
+        .footer-note {
+            text-align: center;
+            padding: 1.5rem 1rem;
+            color: #86868b;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+        
+        .footer-note i {
+            color: #34c759;
+        }
+        
+        /* 错误状态 */
+        .error-container {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+        
+        .error-icon-wrapper {
+            width: 80px;
+            height: 80px;
+            background: #fff2f2;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+        }
+        
+        .error-icon-wrapper i {
+            font-size: 2.5rem;
+            color: #ff3b30;
+        }
+        
+        .error-container h2 {
+            font-size: 1.375rem;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 0.75rem;
+        }
+        
+        .error-container p {
+            color: #86868b;
+        }
+        
+        /* 模态框 */
+        .modal-content {
+            border-radius: 16px;
+            border: none;
+        }
+        
+        .modal-header {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            padding: 1.25rem 1.5rem;
+        }
+        
+        .modal-title {
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+        
+        .modal-body {
+            padding: 1.5rem;
+        }
+        
+        .modal-body h6 {
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .modal-body h6:first-child {
+            margin-top: 0;
+        }
+        
+        .modal-body p, .modal-body li {
+            color: #424245;
+            font-size: 0.9375rem;
+        }
+        
+        .modal-footer {
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+            padding: 1rem 1.5rem;
+        }
+        
+        .modal-footer .btn-primary {
+            background: #1d1d1f;
+            border: none;
+            border-radius: 10px;
+            padding: 0.625rem 1.5rem;
+        }
+        
+        .modal-footer .btn-primary:hover {
+            background: #424245;
+        }
+        
+        /* 响应式 */
+        @media (max-width: 576px) {
+            .form-container {
+                padding: 1rem 0.75rem;
+            }
+            .form-body {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 装饰性背景 -->
+    <div class="bg-decoration bg-decoration-1"></div>
+    <div class="bg-decoration bg-decoration-2"></div>
+    
+    <div class="form-container">
+        <div class="form-card">
+            {% if error_message %}
+            <!-- 错误状态 -->
+            <div class="error-container">
+                <div class="error-icon-wrapper">
+                    <i class="bi bi-exclamation-circle"></i>
+                </div>
+                <h2>无法访问表单</h2>
+                <p>{{ error_message }}</p>
+                <hr style="border-color: rgba(0,0,0,0.06); margin: 2rem 0;">
+                <p class="small">如有疑问，请联系为您服务的顾问。</p>
+            </div>
+            {% else %}
+            <!-- 表单页面 -->
+            <div class="form-header">
+                <div class="form-header-icon">
+                    <i class="bi bi-person-lines-fill"></i>
+                </div>
+                <h1>客户信息表</h1>
+                <p>{{ customer_name }}，请填写以下信息</p>
+            </div>
+            
+            <div class="form-body">
+                <form id="kycForm" novalidate>
+                    {% if form_schema and form_schema.sections %}
+                    {% for section in form_schema.sections %}
+                    <div class="mb-4">
+                        <h5 class="section-title">{{ section.title }}</h5>
+                        <div class="row">
+                            {% for field in section.fields %}
+                            <div class="col-md-{{ 12 if field.type == 'textarea' else 6 }} mb-3">
+                                <label for="{{ field.name }}" class="form-label">
+                                    {{ field.label }}
+                                    {% if field.required %}<span class="text-danger">*</span>{% endif %}
+                                </label>
+                                
+                                {% if field.type == 'text' %}
+                                <input type="text" 
+                                       class="form-control" 
+                                       id="{{ field.name }}" 
+                                       name="{{ field.name }}"
+                                       placeholder="请输入"
+                                       {% if field.required %}required{% endif %}>
+                                
+                                {% elif field.type == 'number' %}
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="{{ field.name }}" 
+                                       name="{{ field.name }}"
+                                       placeholder="请输入"
+                                       min="0"
+                                       {% if field.required %}required{% endif %}>
+                                
+                                {% elif field.type == 'select' %}
+                                <select class="form-select" 
+                                        id="{{ field.name }}" 
+                                        name="{{ field.name }}"
+                                        {% if field.required %}required{% endif %}>
+                                    <option value="">请选择</option>
+                                    {% for option in field.options %}
+                                    <option value="{{ option }}">{{ option }}</option>
+                                    {% endfor %}
+                                </select>
+                                
+                                {% elif field.type == 'multiselect' %}
+                                <div class="multiselect-container">
+                                    {% for option in field.options %}
+                                    <div class="form-check">
+                                        <input class="form-check-input multiselect-checkbox" 
+                                               type="checkbox" 
+                                               id="{{ field.name }}_{{ loop.index }}"
+                                               name="{{ field.name }}"
+                                               value="{{ option }}"
+                                               data-max="{{ field.max if field.max else 0 }}"
+                                               data-field="{{ field.name }}">
+                                        <label class="form-check-label" for="{{ field.name }}_{{ loop.index }}">
+                                            {{ option }}
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% if field.max %}
+                                <small class="text-muted">最多选择 {{ field.max }} 项</small>
+                                {% endif %}
+                                
+                                {% elif field.type == 'textarea' %}
+                                <textarea class="form-control" 
+                                          id="{{ field.name }}" 
+                                          name="{{ field.name }}"
+                                          rows="3"
+                                          placeholder="请输入"
+                                          {% if field.required %}required{% endif %}></textarea>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle"></i> 表单配置加载失败，请联系顾问。
+                    </div>
+                    {% endif %}
+                    
+                    <!-- 隐私声明 -->
+                    <div class="privacy-box">
+                        <div class="form-check mb-0">
+                            <input class="form-check-input" type="checkbox" id="privacyAgreement" required>
+                            <label class="form-check-label" for="privacyAgreement">
+                                我已阅读并同意 <a href="#" data-bs-toggle="modal" data-bs-target="#privacyModal">隐私政策</a>，
+                                同意将上述信息用于移民咨询服务。
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- 提交按钮 -->
+                    <button type="submit" class="btn btn-submit" id="submitBtn">
+                        提交信息
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+        
+        <div class="footer-note">
+            <i class="bi bi-shield-check"></i>
+            <span>您的信息将被安全加密保存，仅用于提供专业移民咨询服务</span>
+        </div>
+    </div>
+    
+    <!-- 隐私政策模态框 -->
+    <div class="modal fade" id="privacyModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">隐私政策</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6>信息收集与使用</h6>
+                    <p>我们收集的信息将仅用于为您提供移民咨询服务，包括但不限于：</p>
+                    <ul>
+                        <li>分析您的移民资格和条件</li>
+                        <li>为您推荐合适的移民方案</li>
+                        <li>与您保持沟通联系</li>
+                    </ul>
+                    
+                    <h6>信息保护</h6>
+                    <p>我们采取严格的安全措施保护您的个人信息：</p>
+                    <ul>
+                        <li>所有数据加密存储</li>
+                        <li>仅授权人员可访问</li>
+                        <li>不会向第三方出售您的信息</li>
+                    </ul>
+                    
+                    <h6>您的权利</h6>
+                    <p>您有权随时要求我们：</p>
+                    <ul>
+                        <li>查看我们持有的您的信息</li>
+                        <li>更正不准确的信息</li>
+                        <li>删除您的个人信息</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">我已了解</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+    const token = "{{ token }}";
+    
+    // 多选限制
+    document.querySelectorAll('.multiselect-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', function() {
+            const max = parseInt(this.dataset.max);
+            if (max > 0) {
+                const fieldName = this.dataset.field;
+                const checked = document.querySelectorAll(`input[name="${fieldName}"]:checked`);
+                if (checked.length > max) {
+                    this.checked = false;
+                    alert(`最多只能选择 ${max} 项`);
+                }
+            }
+        });
+    });
+    
+    // 收集表单数据
+    function collectFormData() {
+        const formData = { kyc_data: {} };
+        const form = document.getElementById('kycForm');
+        
+        // 文本、数字、选择框
+        form.querySelectorAll('input[type="text"], input[type="number"], select, textarea').forEach(input => {
+            if (input.name) {
+                if (input.type === 'number') {
+                    formData.kyc_data[input.name] = input.value ? parseInt(input.value) : null;
+                } else {
+                    formData.kyc_data[input.name] = input.value || null;
+                }
+            }
+        });
+        
+        // 多选框
+        const multiselectFields = {};
+        form.querySelectorAll('.multiselect-checkbox:checked').forEach(checkbox => {
+            const fieldName = checkbox.name;
+            if (!multiselectFields[fieldName]) {
+                multiselectFields[fieldName] = [];
+            }
+            multiselectFields[fieldName].push(checkbox.value);
+        });
+        Object.assign(formData.kyc_data, multiselectFields);
+        
+        return formData;
+    }
+    
+    // 表单提交
+    document.getElementById('kycForm')?.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // 验证隐私协议
+        if (!document.getElementById('privacyAgreement').checked) {
+            alert('请先阅读并同意隐私政策');
+            return;
+        }
+        
+        const submitBtn = document.getElementById('submitBtn');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>提交中...';
+        
+        const formData = collectFormData();
+        
+        try {
+            const response = await fetch(`/api/invites/${token}/submit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            if (response.ok) {
+                window.location.href = `/fill/${token}/success`;
+            } else {
+                const error = await response.json();
+                alert(error.detail || '提交失败，请稍后重试');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '提交信息';
+            }
+        } catch (error) {
+            console.error('提交失败:', error);
+            alert('网络错误，请稍后重试');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '提交信息';
+        }
+    });
+    </script>
+</body>
+</html>

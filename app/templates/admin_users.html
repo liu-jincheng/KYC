@@ -1,0 +1,664 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <!-- 页面标题 -->
+    <div class="col-12 mb-4">
+        <div class="page-header">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                    <p class="text-uppercase text-muted small mb-1">系统管理</p>
+                    <h2 class="mb-1"><i class="bi bi-people-fill me-1"></i> 用户管理</h2>
+                    <p class="text-muted mb-0">管理系统用户和权限</p>
+                </div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="bi bi-plus-circle me-1"></i> 添加用户
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 用户列表 -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ID</th>
+                                <th>用户名</th>
+                                <th>显示名称</th>
+                                <th>角色</th>
+                                <th>状态</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in users %}
+                            <tr>
+                                <td>{{ user.id }}</td>
+                                <td><strong>{{ user.username }}</strong></td>
+                                <td>{{ user.display_name or '-' }}</td>
+                                <td>
+                                    <span class="badge {{ 'bg-danger' if user.role == 'admin' else 'bg-primary' }}">
+                                        {{ '管理员' if user.role == 'admin' else '顾问' }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if user.is_active %}
+                                    <span class="badge bg-success">启用</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">禁用</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M') if user.created_at else '-' }}</td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" 
+                                                onclick="editUser({{ user.id }}, '{{ user.username }}', '{{ user.display_name or '' }}', '{{ user.role }}', {{ user.is_active }})"
+                                                title="编辑">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn btn-outline-warning"
+                                                onclick="resetPassword({{ user.id }}, '{{ user.username }}')"
+                                                title="重置密码">
+                                            <i class="bi bi-key"></i>
+                                        </button>
+                                        {% if user.id != current_user.id %}
+                                        <button class="btn btn-outline-{{ 'danger' if user.is_active else 'success' }}"
+                                                onclick="toggleUserStatus({{ user.id }}, '{{ user.username }}', {{ user.is_active }})"
+                                                title="{{ '禁用' if user.is_active else '启用' }}">
+                                            <i class="bi bi-{{ 'slash-circle' if user.is_active else 'check-circle' }}"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger"
+                                                onclick="deleteUser({{ user.id }}, '{{ user.username }}')"
+                                                title="永久删除">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加用户模态框 -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-person-plus me-2"></i>添加用户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm">
+                    <div class="mb-3">
+                        <label for="newUsername" class="form-label">用户名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="newUsername" required minlength="2">
+                    </div>
+                    <div class="mb-3">
+                        <label for="newPassword" class="form-label">密码 <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="newPassword" required minlength="6">
+                        <small class="text-muted">至少6位字符</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="newDisplayName" class="form-label">显示名称</label>
+                        <input type="text" class="form-control" id="newDisplayName">
+                    </div>
+                    <div class="mb-3">
+                        <label for="newRole" class="form-label">角色</label>
+                        <select class="form-select" id="newRole">
+                            <option value="user" selected>顾问</option>
+                            <option value="admin">管理员</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveNewUserBtn">
+                    <i class="bi bi-check-circle me-1"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑用户模态框 -->
+<div class="modal fade" id="editUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-pencil me-2"></i>编辑用户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editUserForm">
+                    <input type="hidden" id="editUserId">
+                    <div class="mb-3">
+                        <label class="form-label">用户名</label>
+                        <input type="text" class="form-control" id="editUsername" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label for="editDisplayName" class="form-label">显示名称</label>
+                        <input type="text" class="form-control" id="editDisplayName">
+                    </div>
+                    <div class="mb-3">
+                        <label for="editRole" class="form-label">角色</label>
+                        <select class="form-select" id="editRole">
+                            <option value="user">顾问</option>
+                            <option value="admin">管理员</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="saveEditUserBtn">
+                    <i class="bi bi-check-circle me-1"></i>保存
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 通用确认模态框 -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="confirmModalTitle">确认操作</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirmModalMessage"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirmModalBtn">确定</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast 消息提示 -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
+    <div id="messageToast" class="toast" role="alert">
+        <div class="toast-header">
+            <i class="bi bi-info-circle me-2" id="toastIcon"></i>
+            <strong class="me-auto" id="toastTitle">提示</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage"></div>
+    </div>
+</div>
+
+<!-- 危险操作确认模态框（需要输入确认文字） -->
+<div class="modal fade" id="dangerConfirmModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-danger">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle-fill me-2"></i>危险操作确认</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger mb-3">
+                    <i class="bi bi-exclamation-octagon me-2"></i>
+                    <strong>警告：此操作不可逆！</strong>
+                </div>
+                <p id="dangerConfirmMessage" class="mb-3"></p>
+                <div class="mb-3">
+                    <label class="form-label">请手动输入以下内容以确认操作：</label>
+                    <!-- 显示需要输入的文字 -->
+                    <div class="danger-confirm-target" id="dangerConfirmTarget"></div>
+                    <!-- 输入框 -->
+                    <input type="text" class="form-control danger-confirm-input" id="dangerConfirmInput" 
+                           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+                           placeholder="请在此输入上方文字">
+                    <!-- 输入状态提示 -->
+                    <div class="danger-confirm-status mt-2" id="dangerConfirmStatus"></div>
+                    <small class="text-muted mt-1 d-block">
+                        <i class="bi bi-shield-lock me-1"></i>禁止复制粘贴，请手动输入
+                    </small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="dangerConfirmBtn" disabled>
+                    <i class="bi bi-trash me-1"></i>确认删除
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.danger-confirm-target {
+    background: #f8f9fa;
+    border: 2px dashed #dc3545;
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #dc3545;
+    text-align: center;
+    letter-spacing: 1px;
+    user-select: none;
+    -webkit-user-select: none;
+}
+.danger-confirm-input {
+    font-size: 16px;
+    text-align: center;
+    letter-spacing: 1px;
+}
+.danger-confirm-input:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.15);
+}
+.danger-confirm-input.is-valid {
+    border-color: #198754;
+    box-shadow: 0 0 0 3px rgba(25, 135, 84, 0.15);
+}
+.danger-confirm-input.is-invalid {
+    border-color: #dc3545;
+}
+.danger-confirm-status {
+    font-size: 13px;
+    min-height: 20px;
+}
+.danger-confirm-status .char {
+    display: inline-block;
+    width: 1.2em;
+    height: 1.5em;
+    line-height: 1.5em;
+    text-align: center;
+    margin: 0 1px;
+    border-radius: 3px;
+    font-weight: 600;
+}
+.danger-confirm-status .char.correct {
+    background: #d1e7dd;
+    color: #198754;
+}
+.danger-confirm-status .char.incorrect {
+    background: #f8d7da;
+    color: #dc3545;
+}
+.danger-confirm-status .char.pending {
+    background: #e9ecef;
+    color: #6c757d;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let addUserModal = null;
+let editUserModal = null;
+let confirmModal = null;
+let dangerConfirmModal = null;
+let messageToast = null;
+let confirmCallback = null;
+let dangerConfirmCallback = null;
+let dangerConfirmRequired = '';
+
+document.addEventListener('DOMContentLoaded', function() {
+    addUserModal = new bootstrap.Modal(document.getElementById('addUserModal'));
+    editUserModal = new bootstrap.Modal(document.getElementById('editUserModal'));
+    confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    dangerConfirmModal = new bootstrap.Modal(document.getElementById('dangerConfirmModal'));
+    messageToast = new bootstrap.Toast(document.getElementById('messageToast'), { delay: 3000 });
+    
+    // 确认按钮点击事件
+    document.getElementById('confirmModalBtn').addEventListener('click', function() {
+        confirmModal.hide();
+        if (confirmCallback) {
+            confirmCallback();
+            confirmCallback = null;
+        }
+    });
+    
+    // 危险操作输入框 - 禁止粘贴和拖拽
+    const dangerInput = document.getElementById('dangerConfirmInput');
+    dangerInput.addEventListener('paste', e => e.preventDefault());
+    dangerInput.addEventListener('drop', e => e.preventDefault());
+    dangerInput.addEventListener('dragover', e => e.preventDefault());
+    dangerInput.addEventListener('contextmenu', e => e.preventDefault());
+    
+    // 危险操作输入框监听
+    dangerInput.addEventListener('input', function() {
+        updateDangerConfirmDisplay();
+    });
+    
+    // 聚焦时更新显示
+    dangerInput.addEventListener('focus', updateDangerConfirmDisplay);
+    dangerInput.addEventListener('blur', updateDangerConfirmDisplay);
+    
+    // 危险操作确认按钮
+    document.getElementById('dangerConfirmBtn').addEventListener('click', function() {
+        const input = document.getElementById('dangerConfirmInput');
+        if (input.value === dangerConfirmRequired) {
+            dangerConfirmModal.hide();
+            if (dangerConfirmCallback) {
+                dangerConfirmCallback();
+                dangerConfirmCallback = null;
+            }
+        }
+    });
+    
+    // 模态框关闭时重置输入
+    document.getElementById('dangerConfirmModal').addEventListener('hidden.bs.modal', function() {
+        const input = document.getElementById('dangerConfirmInput');
+        input.value = '';
+        input.classList.remove('is-valid', 'is-invalid');
+        document.getElementById('dangerConfirmBtn').disabled = true;
+        document.getElementById('dangerConfirmStatus').innerHTML = '';
+        document.getElementById('dangerConfirmTarget').textContent = '';
+        dangerConfirmRequired = '';
+        dangerConfirmCallback = null;
+    });
+    
+    // 模态框打开时聚焦输入框
+    document.getElementById('dangerConfirmModal').addEventListener('shown.bs.modal', function() {
+        document.getElementById('dangerConfirmInput').focus();
+        updateDangerConfirmDisplay();
+    });
+});
+
+// 显示确认对话框（使用 Bootstrap 模态框）
+function showConfirm(title, message, callback, btnClass = 'btn-primary') {
+    document.getElementById('confirmModalTitle').textContent = title;
+    document.getElementById('confirmModalMessage').textContent = message;
+    document.getElementById('confirmModalBtn').className = 'btn ' + btnClass;
+    confirmCallback = callback;
+    confirmModal.show();
+}
+
+// 显示危险操作确认对话框（需要输入确认文字）
+function showDangerConfirm(message, confirmText, callback) {
+    document.getElementById('dangerConfirmMessage').textContent = message;
+    document.getElementById('dangerConfirmTarget').textContent = confirmText;
+    dangerConfirmRequired = confirmText;
+    dangerConfirmCallback = callback;
+    dangerConfirmModal.show();
+}
+
+// 更新危险确认输入框显示
+function updateDangerConfirmDisplay() {
+    const input = document.getElementById('dangerConfirmInput');
+    const status = document.getElementById('dangerConfirmStatus');
+    const btn = document.getElementById('dangerConfirmBtn');
+    const inputValue = input.value;
+    const target = dangerConfirmRequired;
+    
+    let html = '';
+    let hasError = false;
+    let allCorrect = inputValue.length > 0 && inputValue === target;
+    
+    // 生成状态显示
+    for (let i = 0; i < target.length; i++) {
+        const targetChar = target[i];
+        const inputChar = inputValue[i];
+        
+        if (i < inputValue.length) {
+            if (inputChar === targetChar) {
+                html += `<span class="char correct">${escapeHtml(targetChar)}</span>`;
+            } else {
+                html += `<span class="char incorrect">${escapeHtml(inputChar)}</span>`;
+                hasError = true;
+            }
+        } else {
+            html += `<span class="char pending">${escapeHtml(targetChar)}</span>`;
+        }
+    }
+    
+    // 超出部分显示为错误
+    if (inputValue.length > target.length) {
+        for (let i = target.length; i < inputValue.length; i++) {
+            html += `<span class="char incorrect">${escapeHtml(inputValue[i])}</span>`;
+            hasError = true;
+        }
+    }
+    
+    status.innerHTML = html;
+    
+    // 更新输入框样式
+    input.classList.remove('is-valid', 'is-invalid');
+    if (inputValue.length > 0) {
+        input.classList.add(allCorrect ? 'is-valid' : (hasError ? 'is-invalid' : ''));
+    }
+    
+    // 更新按钮状态
+    btn.disabled = !allCorrect;
+}
+
+// HTML 转义
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// 显示消息提示（使用 Toast）
+function showMessage(message, type = 'success') {
+    const toast = document.getElementById('messageToast');
+    const icon = document.getElementById('toastIcon');
+    const title = document.getElementById('toastTitle');
+    const body = document.getElementById('toastMessage');
+    
+    // 移除旧的颜色类
+    toast.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning', 'text-bg-info');
+    
+    if (type === 'success') {
+        toast.classList.add('text-bg-success');
+        icon.className = 'bi bi-check-circle me-2';
+        title.textContent = '成功';
+    } else if (type === 'error') {
+        toast.classList.add('text-bg-danger');
+        icon.className = 'bi bi-x-circle me-2';
+        title.textContent = '错误';
+    } else if (type === 'warning') {
+        toast.classList.add('text-bg-warning');
+        icon.className = 'bi bi-exclamation-triangle me-2';
+        title.textContent = '警告';
+    } else {
+        toast.classList.add('text-bg-info');
+        icon.className = 'bi bi-info-circle me-2';
+        title.textContent = '提示';
+    }
+    
+    body.textContent = message;
+    messageToast.show();
+}
+
+// 添加用户
+document.getElementById('saveNewUserBtn').addEventListener('click', async function() {
+    const username = document.getElementById('newUsername').value.trim();
+    const password = document.getElementById('newPassword').value;
+    const displayName = document.getElementById('newDisplayName').value.trim();
+    const role = document.getElementById('newRole').value;
+    
+    if (!username || username.length < 2) {
+        showMessage('用户名至少2个字符', 'warning');
+        return;
+    }
+    if (!password || password.length < 6) {
+        showMessage('密码至少6个字符', 'warning');
+        return;
+    }
+    
+    const btn = this;
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch('/api/auth/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username,
+                password,
+                display_name: displayName || username,
+                role
+            })
+        });
+        
+        if (response.ok) {
+            addUserModal.hide();
+            showMessage('用户添加成功', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            const error = await response.json();
+            showMessage(error.detail || '添加失败', 'error');
+        }
+    } catch (error) {
+        console.error('添加失败:', error);
+        showMessage('网络错误', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+// 编辑用户
+function editUser(id, username, displayName, role, isActive) {
+    document.getElementById('editUserId').value = id;
+    document.getElementById('editUsername').value = username;
+    document.getElementById('editDisplayName').value = displayName;
+    document.getElementById('editRole').value = role;
+    editUserModal.show();
+}
+
+document.getElementById('saveEditUserBtn').addEventListener('click', async function() {
+    const id = document.getElementById('editUserId').value;
+    const displayName = document.getElementById('editDisplayName').value.trim();
+    const role = document.getElementById('editRole').value;
+    
+    const btn = this;
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch(`/api/auth/users/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                display_name: displayName,
+                role
+            })
+        });
+        
+        if (response.ok) {
+            editUserModal.hide();
+            showMessage('保存成功', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            const error = await response.json();
+            showMessage(error.detail || '保存失败', 'error');
+        }
+    } catch (error) {
+        console.error('保存失败:', error);
+        showMessage('网络错误', 'error');
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+// 重置密码
+function resetPassword(id, username) {
+    showConfirm(
+        '重置密码',
+        `确定要重置用户 "${username}" 的密码吗？密码将被重置为: 123456`,
+        async function() {
+            try {
+                const response = await fetch(`/api/auth/users/${id}/reset-password`, {
+                    method: 'POST'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showMessage(data.message, 'success');
+                } else {
+                    const error = await response.json();
+                    showMessage(error.detail || '重置失败', 'error');
+                }
+            } catch (error) {
+                console.error('重置失败:', error);
+                showMessage('网络错误', 'error');
+            }
+        },
+        'btn-warning'
+    );
+}
+
+// 切换用户状态
+function toggleUserStatus(id, username, currentStatus) {
+    const action = currentStatus ? '禁用' : '启用';
+    
+    showConfirm(
+        `${action}用户`,
+        `确定要${action}用户 "${username}" 吗？`,
+        async function() {
+            try {
+                const response = await fetch(`/api/auth/users/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        is_active: currentStatus ? 0 : 1
+                    })
+                });
+                
+                if (response.ok) {
+                    showMessage(`${action}成功`, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    const error = await response.json();
+                    showMessage(error.detail || `${action}失败`, 'error');
+                }
+            } catch (error) {
+                console.error(`${action}失败:`, error);
+                showMessage('网络错误', 'error');
+            }
+        },
+        currentStatus ? 'btn-danger' : 'btn-success'
+    );
+}
+
+// 永久删除用户
+function deleteUser(id, username) {
+    const confirmText = `我确认删除 ${username}`;
+    
+    showDangerConfirm(
+        `您即将永久删除用户 "${username}"。删除后，该用户的所有数据将无法恢复。`,
+        confirmText,
+        async function() {
+            try {
+                const response = await fetch(`/api/auth/users/${id}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showMessage(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    const error = await response.json();
+                    showMessage(error.detail || '删除失败', 'error');
+                }
+            } catch (error) {
+                console.error('删除失败:', error);
+                showMessage('网络错误', 'error');
+            }
+        }
+    );
+}
+</script>
+{% endblock %}

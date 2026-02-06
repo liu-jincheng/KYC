@@ -522,6 +522,29 @@ async def analyze_customer_kyc_stream(
         yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
 
 
+def _normalize_asset_level(asset_level: str) -> str:
+    """
+    将旧版 A8/A9/A10/A11 资产级别映射到新版区间描述
+    """
+    if not asset_level:
+        return "未知"
+    
+    # 旧版映射表
+    old_to_new = {
+        "A8 (百万级)": "100-500万",
+        "A9 (千万级)": "2000万-1亿",
+        "A10 (亿级)": "1亿以上",
+        "A11 (十亿级)": "1亿以上",
+    }
+    
+    # 如果是旧版格式，转换为新版
+    if asset_level in old_to_new:
+        return old_to_new[asset_level]
+    
+    # 已经是新版格式，直接返回
+    return asset_level
+
+
 def _generate_mock_analysis(
     kyc_data: dict,
     related_contacts: Optional[List[dict]]
@@ -534,12 +557,32 @@ def _generate_mock_analysis(
     core_needs = kyc_data.get("core_needs", [])
     children_count = kyc_data.get("children_count", 0)
     children_education = kyc_data.get("children_education", [])
-    asset_level = kyc_data.get("asset_level", "")
+    asset_level = _normalize_asset_level(kyc_data.get("asset_level", ""))
     timeline = kyc_data.get("timeline", "")
+    
+    # 新增字段
+    first_education = kyc_data.get("first_education", "")
+    education = kyc_data.get("education", "")
+    education_certifications = kyc_data.get("education_certifications", [])
+    industry_category = kyc_data.get("industry_category", "")
+    residency_requirement = kyc_data.get("residency_requirement", "")
     
     # 生成报告
     countries_text = "、".join(target_countries) if target_countries else "未指定"
     needs_text = "、".join(core_needs) if core_needs else "未指定"
+    cert_text = "、".join(education_certifications) if education_certifications else "无"
+    
+    # 居住要求分析
+    residency_analysis = ""
+    if residency_requirement:
+        if "≥300天" in residency_requirement:
+            residency_analysis = "客户可满足严格的居住要求（如西班牙、葡萄牙黄金签证的居住要求）"
+        elif "≥180天" in residency_requirement:
+            residency_analysis = "客户可满足中等居住要求（如香港优才续签、新加坡PR维持）"
+        elif "<180天" in residency_requirement:
+            residency_analysis = "客户居住时间有限，建议优先考虑无居住要求或低居住要求的项目"
+        else:
+            residency_analysis = "居住意愿待确认，需进一步沟通"
     
     report = f"""# {name} 移民方案分析报告
 
@@ -547,9 +590,16 @@ def _generate_mock_analysis(
 
 - **意向国家**: {countries_text}
 - **核心诉求**: {needs_text}
-- **资产级别**: {asset_level or "未知"}
+- **资产规模**: {asset_level or "未知"}
+- **所属行业**: {industry_category or "未指定"}
+- **最高学历**: {education or "未知"}（第一学历：{first_education or "未知"}）
+- **学历认证**: {cert_text}
 - **办理周期**: {timeline or "未指定"}
 - **家庭情况**: {children_count} 位子女
+- **居住意愿**: {residency_requirement or "未指定"}
+
+### 居住要求分析
+{residency_analysis or "暂无"}
 
 ## 二、方案建议
 
