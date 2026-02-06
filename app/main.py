@@ -11,7 +11,7 @@ import markdown
 from app.config import settings
 from app.database import init_db, get_db, SessionLocal
 from app.models import Customer, FormTemplate, CustomerStatus, FormInvite, User
-from app.routers import customers, forms, analyze, dashboard, ai, invites, auth
+from app.routers import customers, forms, analyze, dashboard, ai, invites, auth, coze_auth
 from app.services.auth_service import get_current_user_from_request
 
 
@@ -47,6 +47,7 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"]
 app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 app.include_router(invites.router, prefix="/api/invites", tags=["invites"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(coze_auth.router, tags=["coze_auth"])
 
 
 # Jinja2 自定义过滤器

@@ -43,13 +43,17 @@ pip install -r requirements.txt
 
 ### 3. 配置环境变量（可选）
 
-创建 `.env` 文件配置 Coze API：
+创建 `.env` 文件配置 Coze OAuth 2.0：
 
 ```env
-# Coze API 配置（可选，不配置则使用模拟数据）
-COZE_API_KEY=your_api_key_here
+# Coze OAuth 2.0 配置（可选，不配置则使用模拟数据）
+COZE_CLIENT_ID=your_client_id_here
+COZE_CLIENT_SECRET=your_client_secret_here
 COZE_WORKFLOW_ID=your_workflow_id_here
+COZE_BIRTHDAY_WORKFLOW_ID=your_birthday_workflow_id_here
 ```
+
+配置完成后，管理员需访问 `/coze/auth/login` 完成一次性 OAuth 授权。
 
 ### 4. 启动应用
 

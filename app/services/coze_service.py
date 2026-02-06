@@ -7,11 +7,32 @@ import logging
 import asyncio
 from typing import Optional, List, Dict, Any, AsyncGenerator
 from app.config import settings
+from app.services.coze_oauth_service import get_valid_token
 
 # 配置日志 - 设置为 DEBUG 级别以显示详细信息
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+
+async def _build_coze_headers(stream: bool = False) -> dict:
+    """
+    构建 Coze API 请求头（动态获取 OAuth Token）
+    
+    Args:
+        stream: 是否为流式请求（需要 Accept: text/event-stream）
+    
+    Returns:
+        包含 Authorization 和 Content-Type 的请求头字典
+    """
+    token = await get_valid_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    if stream:
+        headers["Accept"] = "text/event-stream"
+    return headers
 
 
 async def analyze_customer_kyc(
@@ -39,20 +60,19 @@ async def analyze_customer_kyc(
             ]
         }
     """
-    # 如果未配置 Coze API，返回模拟数据
-    if not settings.COZE_API_KEY or not settings.COZE_WORKFLOW_ID:
-        logger.info("未配置 Coze API，使用模拟数据")
+    # 如果未配置 Coze OAuth，返回模拟数据
+    if not settings.COZE_CLIENT_ID or not settings.COZE_WORKFLOW_ID:
+        logger.info("未配置 Coze OAuth，使用模拟数据")
         return _generate_mock_analysis(kyc_data, related_contacts)
     
     # 构建请求数据
     workflow_input = _build_workflow_input(kyc_data, related_contacts)
     
+    # 动态获取 OAuth Token 构建请求头
+    request_headers = await _build_coze_headers()
+    
     # 构建请求信息
     request_url = f"{settings.COZE_API_BASE_URL}/workflow/run"
-    request_headers = {
-        "Authorization": f"Bearer {settings.COZE_API_KEY[:20]}...（已隐藏）",
-        "Content-Type": "application/json"
-    }
     request_body = {
         "workflow_id": settings.COZE_WORKFLOW_ID,
         "parameters": workflow_input
@@ -66,7 +86,9 @@ async def analyze_customer_kyc(
     print(f"📋 Workflow ID: {settings.COZE_WORKFLOW_ID}")
     print(f"📤 请求头:")
     for key, value in request_headers.items():
-        print(f"   {key}: {value}")
+        # 隐藏 Token 敏感信息
+        display_value = f"{value[:30]}...（已隐藏）" if key == "Authorization" else value
+        print(f"   {key}: {display_value}")
     print(f"📦 请求体 (parameters):")
     print(json.dumps(workflow_input, ensure_ascii=False, indent=2))
     print("-"*60)
@@ -77,10 +99,7 @@ async def analyze_customer_kyc(
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 request_url,
-                headers={
-                    "Authorization": f"Bearer {settings.COZE_API_KEY}",
-                    "Content-Type": "application/json"
-                },
+                headers=request_headers,
                 json=request_body
             )
             
@@ -349,9 +368,9 @@ async def analyze_customer_kyc_stream(
     Yields:
         SSE 格式的流式数据块
     """
-    # 如果未配置 Coze API，返回模拟数据（流式）
-    if not settings.COZE_API_KEY or not settings.COZE_WORKFLOW_ID:
-        logger.info("未配置 Coze API，使用模拟流式数据")
+    # 如果未配置 Coze OAuth，返回模拟数据（流式）
+    if not settings.COZE_CLIENT_ID or not settings.COZE_WORKFLOW_ID:
+        logger.info("未配置 Coze OAuth，使用模拟流式数据")
         mock_result = _generate_mock_analysis(kyc_data, related_contacts)
         # 模拟流式输出
         report = mock_result.get("report", "")
@@ -365,6 +384,9 @@ async def analyze_customer_kyc_stream(
     
     # 构建请求数据
     workflow_input = _build_workflow_input(kyc_data, related_contacts)
+    
+    # 动态获取 OAuth Token 构建请求头
+    stream_headers = await _build_coze_headers(stream=True)
     
     # 流式 API 端点
     request_url = f"{settings.COZE_API_BASE_URL}/workflow/stream_run"
@@ -387,11 +409,7 @@ async def analyze_customer_kyc_stream(
             async with client.stream(
                 "POST",
                 request_url,
-                headers={
-                    "Authorization": f"Bearer {settings.COZE_API_KEY}",
-                    "Content-Type": "application/json",
-                    "Accept": "text/event-stream"
-                },
+                headers=stream_headers,
                 json=request_body
             ) as response:
                 print(f"📊 流式响应状态码: {response.status_code}")
@@ -711,8 +729,8 @@ async def generate_birthday_greeting_via_coze(
     Returns:
         生成的祝福语文本
     """
-    # 如果未配置 Coze API 或生日工作流 ID，返回模拟祝福
-    if not settings.COZE_API_KEY or not settings.COZE_BIRTHDAY_WORKFLOW_ID:
+    # 如果未配置 Coze OAuth 或生日工作流 ID，返回模拟祝福
+    if not settings.COZE_CLIENT_ID or not settings.COZE_BIRTHDAY_WORKFLOW_ID:
         logger.info("未配置 Coze 生日工作流，使用模拟祝福")
         return _generate_mock_birthday_greeting(name, birthday_date, job_type, job_title, style)
     
@@ -726,6 +744,9 @@ async def generate_birthday_greeting_via_coze(
         "style": {"value": style},
         "birthday_date": {"value": birthday_date}
     }
+    
+    # 动态获取 OAuth Token 构建请求头
+    birthday_headers = await _build_coze_headers()
     
     request_url = f"{settings.COZE_API_BASE_URL}/workflow/run"
     request_body = {
@@ -746,10 +767,7 @@ async def generate_birthday_greeting_via_coze(
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 request_url,
-                headers={
-                    "Authorization": f"Bearer {settings.COZE_API_KEY}",
-                    "Content-Type": "application/json"
-                },
+                headers=birthday_headers,
                 json=request_body
             )
             
@@ -865,10 +883,10 @@ async def generate_birthday_greeting_stream(
     Yields:
         SSE 格式的流式数据块
     """
-    # 如果未配置 Coze API 或生日工作流 ID，返回错误
-    if not settings.COZE_API_KEY or not settings.COZE_BIRTHDAY_WORKFLOW_ID:
-        logger.error("未配置 Coze 生日工作流")
-        yield f"data: {json.dumps({'type': 'error', 'message': '未配置 Coze 生日工作流'}, ensure_ascii=False)}\n\n"
+    # 如果未配置 Coze OAuth 或生日工作流 ID，返回错误
+    if not settings.COZE_CLIENT_ID or not settings.COZE_BIRTHDAY_WORKFLOW_ID:
+        logger.error("未配置 Coze OAuth 或生日工作流")
+        yield f"data: {json.dumps({'type': 'error', 'message': '未配置 Coze OAuth 或生日工作流'}, ensure_ascii=False)}\n\n"
         return
     
     # 构建请求参数 - 与非流式版本相同的格式
@@ -879,6 +897,9 @@ async def generate_birthday_greeting_stream(
         "style": {"value": style},
         "birthday_date": {"value": birthday_date}
     }
+    
+    # 动态获取 OAuth Token 构建请求头
+    birthday_stream_headers = await _build_coze_headers(stream=True)
     
     # 使用流式 API 端点
     request_url = f"{settings.COZE_API_BASE_URL}/workflow/stream_run"
@@ -903,11 +924,7 @@ async def generate_birthday_greeting_stream(
             async with client.stream(
                 "POST",
                 request_url,
-                headers={
-                    "Authorization": f"Bearer {settings.COZE_API_KEY}",
-                    "Content-Type": "application/json",
-                    "Accept": "text/event-stream"
-                },
+                headers=birthday_stream_headers,
                 json=request_body
             ) as response:
                 print(f"📊 流式响应状态码: {response.status_code}")

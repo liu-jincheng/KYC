@@ -119,6 +119,21 @@ class FormInvite(Base):
         return secrets.token_urlsafe(32)
 
 
+class CozeOAuthToken(Base):
+    """
+    Coze OAuth 令牌存储表 - 存储 OAuth 2.0 凭证
+    用于持久化 access_token 和 refresh_token，支持自动续期
+    """
+    __tablename__ = "coze_oauth_tokens"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    access_token = Column(Text, nullable=False)       # OAuth Access Token
+    refresh_token = Column(Text, nullable=False)       # OAuth Refresh Token (用于续期)
+    expires_at = Column(Integer, nullable=False)        # 过期时间 (Unix 时间戳)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+
 # 默认表单配置结构
 DEFAULT_FORM_SCHEMA = {
     "version": "1.1",
