@@ -5,12 +5,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from typing import Literal
+from typing import Literal, Optional
 import json
 
 from app.database import get_db
-from app.models import Customer
+from app.models import Customer, User
 from app.services.coze_service import generate_birthday_greeting_via_coze, generate_birthday_greeting_stream
+from app.services.auth_service import get_current_user_optional
+from app.services.activity_service import log_activity
 
 router = APIRouter()
 
@@ -72,6 +74,7 @@ def _safe_get_from_kyc(kyc_data: dict, key: str, default: str = "") -> str:
 @router.post("/generate-birthday-greeting", response_model=BirthdayGreetingResponse)
 async def generate_birthday_greeting(
     request: BirthdayGreetingRequest,
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """
@@ -112,7 +115,14 @@ async def generate_birthday_greeting(
             job_title=job_title,
             style=style
         )
-        
+
+        log_activity(
+            db, request.customer_id, "birthday_greeting_generated",
+            {"style": style},
+            user_id=current_user.id if current_user else None,
+            auto_commit=True
+        )
+
         return BirthdayGreetingResponse(
             success=True,
             message="生成成功",

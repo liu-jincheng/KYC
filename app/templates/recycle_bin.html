@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="page-header">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                    <p class="text-uppercase text-muted small mb-1">回收站</p>
+                    <h2 class="mb-1"><i class="bi bi-trash3 me-1"></i> 回收站</h2>
+                    <p class="lead text-muted mb-0">共 {{ total }} 位已删除客户，可恢复或永久删除。</p>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="/customers" class="btn btn-outline-primary btn-icon px-3">
+                        <i class="bi bi-arrow-left"></i> 返回客户列表
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-trash3 text-danger"></i>
+                    <span class="fw-bold">已删除客户</span>
+                </div>
+                <span class="text-muted small">
+                    {% if total > 0 %}
+                    第 {{ (page - 1) * page_size + 1 }}-{{ [page * page_size, total] | min }} 条 / 共 {{ total }} 条
+                    {% endif %}
+                </span>
+            </div>
+            <div class="card-body p-0">
+                {% if customers %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 40px;">
+                                    <input class="form-check-input" type="checkbox" id="selectAll" title="全选">
+                                </th>
+                                <th>ID</th>
+                                <th>姓名</th>
+                                <th>原状态</th>
+                                <th class="d-none d-md-table-cell">删除时间</th>
+                                <th class="d-none d-md-table-cell">负责顾问</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for customer in customers %}
+                            <tr>
+                                <td>
+                                    <input class="form-check-input row-checkbox" type="checkbox" value="{{ customer.id }}">
+                                </td>
+                                <td>{{ customer.id }}</td>
+                                <td class="fw-bold text-muted">{{ customer.name }}</td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ customer.status }}</span>
+                                </td>
+                                <td class="d-none d-md-table-cell">
+                                    {{ customer.deleted_at.strftime('%Y-%m-%d %H:%M') if customer.deleted_at else '-' }}
+                                </td>
+                                <td class="d-none d-md-table-cell">
+                                    {{ users_map.get(customer.owner_user_id, '-') if customer.owner_user_id else '-' }}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-success btn-restore"
+                                                data-customer-id="{{ customer.id }}"
+                                                title="恢复">
+                                            <i class="bi bi-arrow-counterclockwise"></i> 恢复
+                                        </button>
+                                        {% if current_user and current_user.is_admin %}
+                                        <button class="btn btn-outline-danger btn-permanent-delete"
+                                                data-customer-id="{{ customer.id }}"
+                                                data-customer-name="{{ customer.name }}"
+                                                title="永久删除">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- 分页 -->
+                {% if total_pages > 1 %}
+                <nav class="d-flex justify-content-center py-3">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+                            <a class="page-link" href="?page={{ page - 1 }}&page_size={{ page_size }}"><i class="bi bi-chevron-left"></i></a>
+                        </li>
+                        {% for p in range(1, total_pages + 1) %}
+                            {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                        <li class="page-item {{ 'active' if p == page else '' }}">
+                            <a class="page-link" href="?page={{ p }}&page_size={{ page_size }}">{{ p }}</a>
+                        </li>
+                            {% elif p == 2 or p == total_pages - 1 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        <li class="page-item {{ 'disabled' if page >= total_pages else '' }}">
+                            <a class="page-link" href="?page={{ page + 1 }}&page_size={{ page_size }}"><i class="bi bi-chevron-right"></i></a>
+                        </li>
+                    </ul>
+                </nav>
+                {% endif %}
+
+                {% else %}
+                <div class="text-center empty-state">
+                    <i class="bi bi-trash3 fs-1 text-muted"></i>
+                    <p class="text-muted mt-3">回收站为空</p>
+                    <a href="/customers" class="btn btn-outline-primary">返回客户列表</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量操作栏 -->
+<div class="batch-action-bar" id="batchActionBar" style="display: none;">
+    <span id="batchSelectedCount">0</span> 项已选
+    <button class="btn btn-sm btn-success" id="batchRestoreBtn">
+        <i class="bi bi-arrow-counterclockwise"></i> 批量恢复
+    </button>
+    {% if current_user and current_user.is_admin %}
+    <button class="btn btn-sm btn-danger" id="batchPermanentDeleteBtn">
+        <i class="bi bi-x-circle"></i> 批量永久删除
+    </button>
+    {% endif %}
+    <button class="btn btn-sm btn-outline-light ms-auto" id="batchCancelBtn">取消</button>
+</div>
+
+<!-- Toast -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
+    <div id="messageToast" class="toast" role="alert">
+        <div class="toast-header">
+            <i class="bi bi-info-circle me-2" id="toastIcon"></i>
+            <strong class="me-auto" id="toastTitle">提示</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage"></div>
+    </div>
+</div>
+
+<!-- 永久删除确认 -->
+<div class="modal fade" id="permanentDeleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle me-2"></i>永久删除</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要<strong class="text-danger">永久删除</strong>客户 <strong id="permDeleteName"></strong> 吗？</p>
+                <p class="text-danger small"><i class="bi bi-exclamation-circle me-1"></i>此操作不可撤销，所有数据将被彻底清除！</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmPermanentDelete">永久删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const messageToast = new bootstrap.Toast(document.getElementById('messageToast'), { delay: 3000 });
+
+function showToast(message, type = 'error') {
+    const toast = document.getElementById('messageToast');
+    toast.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning');
+    if (type === 'success') {
+        toast.classList.add('text-bg-success');
+        document.getElementById('toastTitle').textContent = '成功';
+    } else if (type === 'warning') {
+        toast.classList.add('text-bg-warning');
+        document.getElementById('toastTitle').textContent = '警告';
+    } else {
+        toast.classList.add('text-bg-danger');
+        document.getElementById('toastTitle').textContent = '错误';
+    }
+    document.getElementById('toastMessage').textContent = message;
+    messageToast.show();
+}
+
+// 恢复单个客户
+document.querySelectorAll('.btn-restore').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const cid = this.dataset.customerId;
+        this.disabled = true;
+        try {
+            const resp = await fetch(`/api/customers/${cid}/restore`, { method: 'POST' });
+            if (resp.ok) {
+                showToast('客户已恢复', 'success');
+                setTimeout(() => window.location.reload(), 500);
+            } else {
+                showToast('恢复失败');
+                this.disabled = false;
+            }
+        } catch (e) {
+            showToast('恢复失败');
+            this.disabled = false;
+        }
+    });
+});
+
+// 永久删除单个客户
+let permDeleteId = null;
+document.querySelectorAll('.btn-permanent-delete').forEach(btn => {
+    btn.addEventListener('click', function() {
+        permDeleteId = this.dataset.customerId;
+        document.getElementById('permDeleteName').textContent = this.dataset.customerName;
+        new bootstrap.Modal(document.getElementById('permanentDeleteModal')).show();
+    });
+});
+
+document.getElementById('confirmPermanentDelete').addEventListener('click', async function() {
+    if (!permDeleteId) return;
+    this.disabled = true;
+    try {
+        const resp = await fetch(`/api/customers/${permDeleteId}/permanent`, { method: 'DELETE' });
+        if (resp.ok) {
+            showToast('已永久删除', 'success');
+            setTimeout(() => window.location.reload(), 500);
+        } else {
+            showToast('删除失败');
+        }
+    } catch (e) {
+        showToast('删除失败');
+    } finally {
+        this.disabled = false;
+    }
+});
+
+// 批量选择
+const selectAllCb = document.getElementById('selectAll');
+const batchBar = document.getElementById('batchActionBar');
+const batchCountEl = document.getElementById('batchSelectedCount');
+
+function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => parseInt(cb.value));
+}
+
+function updateBatchBar() {
+    const ids = getSelectedIds();
+    batchBar.style.display = ids.length > 0 ? 'flex' : 'none';
+    batchCountEl.textContent = ids.length;
+}
+
+selectAllCb.addEventListener('change', function() {
+    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = this.checked);
+    updateBatchBar();
+});
+
+document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.addEventListener('change', updateBatchBar);
+});
+
+document.getElementById('batchCancelBtn').addEventListener('click', function() {
+    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+    selectAllCb.checked = false;
+    updateBatchBar();
+});
+
+// 批量恢复
+document.getElementById('batchRestoreBtn').addEventListener('click', async function() {
+    const ids = getSelectedIds();
+    if (!ids.length) return;
+    this.disabled = true;
+    try {
+        const resp = await fetch('/api/customers/batch/restore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_ids: ids })
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            showToast(data.message, 'success');
+            setTimeout(() => window.location.reload(), 500);
+        } else {
+            showToast('批量恢复失败');
+        }
+    } catch (e) {
+        showToast('批量恢复失败');
+    } finally {
+        this.disabled = false;
+    }
+});
+
+// 批量永久删除（管理员）
+const batchPermDeleteBtn = document.getElementById('batchPermanentDeleteBtn');
+if (batchPermDeleteBtn) {
+    batchPermDeleteBtn.addEventListener('click', async function() {
+        const ids = getSelectedIds();
+        if (!ids.length) return;
+        if (!confirm(`确定要永久删除 ${ids.length} 位客户吗？此操作不可撤销！`)) return;
+        this.disabled = true;
+        let successCount = 0;
+        for (const id of ids) {
+            try {
+                const resp = await fetch(`/api/customers/${id}/permanent`, { method: 'DELETE' });
+                if (resp.ok) successCount++;
+            } catch (e) {}
+        }
+        showToast(`已永久删除 ${successCount} 位客户`, 'success');
+        setTimeout(() => window.location.reload(), 500);
+    });
+}
+</script>
+{% endblock %}

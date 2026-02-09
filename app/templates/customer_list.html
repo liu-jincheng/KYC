@@ -9,14 +9,17 @@
                 <div>
                     <p class="text-uppercase text-muted small mb-1">客户管理</p>
                     <h2 class="mb-1"><i class="bi bi-people me-1"></i> 客户列表</h2>
-                    <p class="lead text-muted mb-0">共 {{ customers|length }} 位客户，快速筛选并批量操作。</p>
+                    <p class="lead text-muted mb-0">共 {{ total }} 位客户，快速筛选并批量操作。</p>
                 </div>
                 <div class="d-flex gap-2 flex-wrap">
                     <a href="/customers/new" class="btn btn-primary btn-icon px-3">
                         <i class="bi bi-plus-circle"></i> 新建客户
                     </a>
-                    <a href="/" class="btn btn-outline-light btn-icon px-3">
-                        <i class="bi bi-speedometer2"></i> 返回仪表盘
+                    <button class="btn btn-outline-success btn-icon px-3" data-bs-toggle="modal" data-bs-target="#exportModal">
+                        <i class="bi bi-download"></i> 导出 CSV
+                    </button>
+                    <a href="/recycle-bin" class="btn btn-outline-secondary btn-icon px-3" title="回收站">
+                        <i class="bi bi-trash3"></i> 回收站
                     </a>
                 </div>
             </div>
@@ -24,20 +27,82 @@
     </div>
 </div>
 
-<!-- 状态筛选 -->
+<!-- 状态筛选 & 搜索 -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="d-flex flex-wrap gap-2">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
             <a href="/customers" class="btn {{ 'btn-primary' if not current_status else 'btn-outline-primary' }} rounded-pill px-3">
                 全部
             </a>
             {% for status in statuses %}
-            <a href="/customers?status={{ status }}" 
+            <a href="/customers?status={{ status }}{% if search %}&search={{ search }}{% endif %}{% if owner_id is not none %}&owner_id={{ owner_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}"
                class="btn {{ 'btn-primary' if current_status == status else 'btn-outline-primary' }} rounded-pill px-3">
                 {{ status }}
             </a>
             {% endfor %}
-            <span class="soft-badge ms-auto"><span class="badge-dot bg-primary"></span> 当前视图：{{ current_status if current_status else '全部' }}</span>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <!-- 服务端搜索 -->
+                <form method="get" action="/customers" class="d-flex align-items-center gap-2 mb-0" id="searchForm">
+                    {% if current_status %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+                    {% if owner_id is not none %}<input type="hidden" name="owner_id" value="{{ owner_id }}">{% endif %}
+                    {% if date_from %}<input type="hidden" name="date_from" value="{{ date_from }}">{% endif %}
+                    {% if date_to %}<input type="hidden" name="date_to" value="{{ date_to }}">{% endif %}
+                    <div class="input-group input-group-sm" style="width: 240px;">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+                        <input type="text" class="form-control border-start-0 border-end-0" name="search" id="customerSearch"
+                               placeholder="输入姓名搜索..." value="{{ search }}" autocomplete="off">
+                        <button type="button" class="input-group-text bg-white border-start-0 text-muted" id="searchClearBtn"
+                                style="cursor:pointer; {{ 'display:none;' if not search else '' }}" title="清除搜索">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </form>
+                <!-- 高级筛选按钮 -->
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFilter">
+                    <i class="bi bi-funnel"></i>
+                </button>
+                <div class="btn-group btn-group-sm" role="group" aria-label="视图切换">
+                    <button type="button" class="btn btn-outline-primary active" id="listViewBtn" title="列表视图">
+                        <i class="bi bi-list-ul"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" id="kanbanViewBtn" title="看板视图">
+                        <i class="bi bi-kanban"></i>
+                    </button>
+                </div>
+                <span class="soft-badge"><span class="badge-dot bg-primary"></span> {{ current_status if current_status else '全部' }}</span>
+            </div>
+        </div>
+
+        <!-- 高级筛选面板 -->
+        <div class="collapse {{ 'show' if (owner_id is not none or date_from or date_to) else '' }}" id="advancedFilter">
+            <div class="card card-body mt-3 p-3">
+                <form method="get" action="/customers" class="row g-3 align-items-end mb-0">
+                    {% if current_status %}<input type="hidden" name="status" value="{{ current_status }}">{% endif %}
+                    {% if search %}<input type="hidden" name="search" value="{{ search }}">{% endif %}
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">负责顾问</label>
+                        <select class="form-select form-select-sm" name="owner_id">
+                            <option value="">全部顾问</option>
+                            <option value="0" {{ 'selected' if owner_id == 0 else '' }}>未分配</option>
+                            {% for uid, uname in users_map.items() %}
+                            <option value="{{ uid }}" {{ 'selected' if owner_id == uid else '' }}>{{ uname }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">创建日期 (起)</label>
+                        <input type="date" class="form-control form-control-sm" name="date_from" value="{{ date_from }}">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-semibold">创建日期 (止)</label>
+                        <input type="date" class="form-control form-control-sm" name="date_to" value="{{ date_to }}">
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-sm btn-primary me-1"><i class="bi bi-funnel"></i> 筛选</button>
+                        <a href="/customers" class="btn btn-sm btn-outline-secondary">重置</a>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </div>
@@ -45,13 +110,19 @@
 <!-- 客户列表 -->
 <div class="row">
     <div class="col-12">
+        <!-- 列表视图 -->
+        <div id="listView">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <div class="d-flex align-items-center gap-2">
                     <i class="bi bi-list-task text-primary"></i>
                     <span class="fw-bold">客户总览</span>
                 </div>
-                <span class="text-muted small">点击姓名可查看详情</span>
+                <span class="text-muted small">
+                    {% if total > 0 %}
+                    第 {{ (page - 1) * page_size + 1 }}-{{ [page * page_size, total] | min }} 条 / 共 {{ total }} 条
+                    {% endif %}
+                </span>
             </div>
             <div class="card-body p-0">
                 {% if customers %}
@@ -59,17 +130,23 @@
                     <table class="table table-hover mb-0 table-modern align-middle">
                         <thead class="table-light">
                             <tr>
-                                <th>ID</th>
-                                <th>姓名</th>
+                                <th style="width: 40px;">
+                                    <input class="form-check-input" type="checkbox" id="selectAll" title="全选">
+                                </th>
+                                <th class="sortable" data-col="1" data-type="number">ID <i class="bi bi-chevron-expand text-muted sort-icon"></i></th>
+                                <th class="sortable" data-col="2" data-type="text">姓名 <i class="bi bi-chevron-expand text-muted sort-icon"></i></th>
                                 <th>状态</th>
-                                <th>创建时间</th>
-                                <th>下次跟进</th>
+                                <th class="sortable d-none d-md-table-cell" data-col="4" data-type="date">创建时间 <i class="bi bi-chevron-expand text-muted sort-icon"></i></th>
+                                <th class="sortable d-none d-md-table-cell" data-col="5" data-type="date">下次跟进 <i class="bi bi-chevron-expand text-muted sort-icon"></i></th>
                                 <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for customer in customers %}
                             <tr>
+                                <td>
+                                    <input class="form-check-input row-checkbox" type="checkbox" value="{{ customer.id }}" data-name="{{ customer.name }}">
+                                </td>
                                 <td>{{ customer.id }}</td>
                                 <td>
                                     <a href="/customers/{{ customer.id }}" class="text-decoration-none fw-bold">
@@ -81,27 +158,27 @@
                                         {{ customer.status }}
                                     </span>
                                 </td>
-                                <td>{{ customer.created_at.strftime('%Y-%m-%d %H:%M') if customer.created_at else '-' }}</td>
-                                <td>{{ customer.next_follow_up.strftime('%Y-%m-%d') if customer.next_follow_up else '-' }}</td>
+                                <td class="d-none d-md-table-cell">{{ customer.created_at.strftime('%Y-%m-%d %H:%M') if customer.created_at else '-' }}</td>
+                                <td class="d-none d-md-table-cell">{{ customer.next_follow_up.strftime('%Y-%m-%d') if customer.next_follow_up else '-' }}</td>
                                 <td>
                                     <div class="btn-group btn-group-sm">
-                                        <a href="/customers/{{ customer.id }}" class="btn btn-outline-primary" title="查看详情">
+                                        <a href="/customers/{{ customer.id }}" class="btn btn-outline-primary" title="查看详情" aria-label="查看详情">
                                             <i class="bi bi-eye"></i>
                                         </a>
-                                        <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline-secondary" title="编辑">
+                                        <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline-secondary" title="编辑" aria-label="编辑">
                                             <i class="bi bi-pencil"></i>
                                         </a>
                                         {% if customer.status == '待录入' or customer.status == '跟进中' %}
-                                        <button class="btn btn-outline-info btn-analyze" 
-                                                data-customer-id="{{ customer.id }}" 
-                                                title="AI分析">
+                                        <button class="btn btn-outline-info btn-analyze"
+                                                data-customer-id="{{ customer.id }}"
+                                                title="AI分析" aria-label="AI分析">
                                             <i class="bi bi-robot"></i>
                                         </button>
                                         {% endif %}
-                                        <button class="btn btn-outline-danger btn-delete" 
+                                        <button class="btn btn-outline-danger btn-delete"
                                                 data-customer-id="{{ customer.id }}"
                                                 data-customer-name="{{ customer.name }}"
-                                                title="删除">
+                                                title="删除" aria-label="删除">
                                             <i class="bi bi-trash"></i>
                                         </button>
                                     </div>
@@ -111,6 +188,34 @@
                         </tbody>
                     </table>
                 </div>
+
+                <!-- 分页控件 -->
+                {% if total_pages > 1 %}
+                <nav class="d-flex justify-content-center py-3">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+                            <a class="page-link" href="?page={{ page - 1 }}{% if current_status %}&status={{ current_status }}{% endif %}{% if search %}&search={{ search }}{% endif %}{% if owner_id is not none %}&owner_id={{ owner_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}&page_size={{ page_size }}">
+                                <i class="bi bi-chevron-left"></i>
+                            </a>
+                        </li>
+                        {% for p in range(1, total_pages + 1) %}
+                            {% if p == 1 or p == total_pages or (p >= page - 2 and p <= page + 2) %}
+                        <li class="page-item {{ 'active' if p == page else '' }}">
+                            <a class="page-link" href="?page={{ p }}{% if current_status %}&status={{ current_status }}{% endif %}{% if search %}&search={{ search }}{% endif %}{% if owner_id is not none %}&owner_id={{ owner_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}&page_size={{ page_size }}">{{ p }}</a>
+                        </li>
+                            {% elif p == 2 or p == total_pages - 1 %}
+                        <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+                        <li class="page-item {{ 'disabled' if page >= total_pages else '' }}">
+                            <a class="page-link" href="?page={{ page + 1 }}{% if current_status %}&status={{ current_status }}{% endif %}{% if search %}&search={{ search }}{% endif %}{% if owner_id is not none %}&owner_id={{ owner_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}&page_size={{ page_size }}">
+                                <i class="bi bi-chevron-right"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+                {% endif %}
+
                 {% else %}
                 <div class="text-center empty-state">
                     <i class="bi bi-inbox fs-1 text-muted"></i>
@@ -122,6 +227,73 @@
                 {% endif %}
             </div>
         </div>
+        </div>
+
+        <!-- 看板视图 -->
+        <div id="kanbanView" style="display: none;">
+            <div class="kanban-board">
+                {% set status_colors = {'待录入': '#f4a261', 'AI分析中': '#0dcaf0', '已出方案': '#4361ee', '跟进中': '#6c757d', '已签约': '#2bb773'} %}
+                {% for status in statuses %}
+                <div class="kanban-column" data-status="{{ status }}">
+                    <div class="kanban-column-header" style="background: {{ status_colors.get(status, '#6c757d') }};">
+                        <span>{{ status }}</span>
+                        <span class="badge kanban-count">0</span>
+                    </div>
+                    <div class="kanban-column-body" data-status="{{ status }}">
+                        {% for customer in customers %}
+                        {% if customer.status == status %}
+                        <div class="kanban-card" draggable="true"
+                             data-customer-id="{{ customer.id }}"
+                             data-customer-name="{{ customer.name }}"
+                             data-status="{{ customer.status }}">
+                            <a href="/customers/{{ customer.id }}" class="card-name">{{ customer.name }}</a>
+                            <div class="card-meta mt-1">
+                                <span class="me-2">#{{ customer.id }}</span>
+                                {% if customer.next_follow_up %}
+                                <span><i class="bi bi-calendar-event me-1"></i>{{ customer.next_follow_up.strftime('%m-%d') }}</span>
+                                {% endif %}
+                                {% if customer.owner_user_id and users_map %}
+                                <span class="ms-2"><i class="bi bi-person me-1"></i>{{ users_map.get(customer.owner_user_id, '') }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量操作悬浮栏 -->
+<div class="batch-action-bar" id="batchActionBar" style="display: none;">
+    <span id="batchSelectedCount">0</span> 项已选
+    <select class="form-select form-select-sm" id="batchStatusSelect" style="width: 140px;">
+        <option value="">批量改状态...</option>
+        {% for status in statuses %}
+        <option value="{{ status }}">{{ status }}</option>
+        {% endfor %}
+    </select>
+    <button class="btn btn-sm btn-warning" id="batchStatusBtn" disabled>
+        <i class="bi bi-arrow-repeat"></i> 修改状态
+    </button>
+    <button class="btn btn-sm btn-danger" id="batchDeleteBtn">
+        <i class="bi bi-trash"></i> 批量删除
+    </button>
+    <button class="btn btn-sm btn-outline-light ms-auto" id="batchCancelBtn">取消</button>
+</div>
+
+<!-- Toast 消息提示 -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
+    <div id="messageToast" class="toast" role="alert">
+        <div class="toast-header">
+            <i class="bi bi-info-circle me-2" id="toastIcon"></i>
+            <strong class="me-auto" id="toastTitle">提示</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage"></div>
     </div>
 </div>
 
@@ -135,11 +307,77 @@
             </div>
             <div class="modal-body">
                 <p>确定要删除客户 <strong id="deleteCustomerName"></strong> 吗？</p>
-                <p class="text-danger small">此操作不可撤销！</p>
+                <p class="text-warning small"><i class="bi bi-arrow-counterclockwise me-1"></i>客户将移入回收站，可随时恢复。</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-danger" id="confirmDelete">确认删除</button>
+                <button type="button" class="btn btn-danger" id="confirmDelete">移入回收站</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 批量删除确认模态框 -->
+<div class="modal fade" id="batchDeleteModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">确认批量删除</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>确定要将 <strong id="batchDeleteCount">0</strong> 位客户移入回收站吗？</p>
+                <p class="text-warning small"><i class="bi bi-arrow-counterclockwise me-1"></i>可在回收站中恢复。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-danger" id="confirmBatchDelete">确认删除</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- CSV 导出模态框 -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-download me-2"></i>导出客户数据</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">选择导出的数据内容，文件将以 CSV 格式下载。</p>
+                <div class="mb-3">
+                    <label class="form-label fw-semibold">导出内容</label>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="exportBasic" value="basic" checked>
+                        <label class="form-check-label" for="exportBasic">
+                            基础信息 <small class="text-muted">(ID、姓名、状态、创建时间、跟进日期、生日、负责顾问)</small>
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="exportKyc" value="kyc">
+                        <label class="form-check-label" for="exportKyc">
+                            KYC 表单数据 <small class="text-muted">(所有 KYC 字段)</small>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="exportAiReport" value="ai_report">
+                        <label class="form-check-label" for="exportAiReport">
+                            AI 分析报告 <small class="text-muted">(完整报告文本)</small>
+                        </label>
+                    </div>
+                </div>
+                <div class="alert alert-info small mb-0">
+                    <i class="bi bi-info-circle me-1"></i>
+                    将导出当前筛选条件下的所有客户（{{ current_status if current_status else '全部状态' }}）
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-success" id="doExportBtn">
+                    <i class="bi bi-download me-1"></i>下载 CSV
+                </button>
             </div>
         </div>
     </div>
@@ -149,8 +387,65 @@
 {% block extra_js %}
 <script>
 let deleteCustomerId = null;
+const messageToast = new bootstrap.Toast(document.getElementById('messageToast'), { delay: 3000 });
 
-// 删除按钮点击
+function showToast(message, type = 'error') {
+    const toast = document.getElementById('messageToast');
+    const icon = document.getElementById('toastIcon');
+    const title = document.getElementById('toastTitle');
+    const body = document.getElementById('toastMessage');
+    toast.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning');
+    if (type === 'success') {
+        toast.classList.add('text-bg-success');
+        icon.className = 'bi bi-check-circle me-2';
+        title.textContent = '成功';
+    } else if (type === 'warning') {
+        toast.classList.add('text-bg-warning');
+        icon.className = 'bi bi-exclamation-triangle me-2';
+        title.textContent = '警告';
+    } else {
+        toast.classList.add('text-bg-danger');
+        icon.className = 'bi bi-x-circle me-2';
+        title.textContent = '错误';
+    }
+    body.textContent = message;
+    messageToast.show();
+}
+
+// ============ 搜索（输入即搜，带防抖） ============
+const searchInput = document.getElementById('customerSearch');
+const searchForm = document.getElementById('searchForm');
+const searchClearBtn = document.getElementById('searchClearBtn');
+let searchTimer = null;
+
+searchInput.addEventListener('input', function() {
+    const val = this.value.trim();
+    // 显示/隐藏清除按钮
+    searchClearBtn.style.display = val ? '' : 'none';
+    // 防抖 400ms 后自动提交
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+        searchForm.submit();
+    }, 400);
+});
+
+// 回车立即提交（跳过防抖）
+searchInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        clearTimeout(searchTimer);
+        searchForm.submit();
+    }
+});
+
+// 清除按钮
+searchClearBtn.addEventListener('click', function() {
+    searchInput.value = '';
+    searchClearBtn.style.display = 'none';
+    clearTimeout(searchTimer);
+    searchForm.submit();
+});
+
+// ============ 单个删除 ============
 document.querySelectorAll('.btn-delete').forEach(btn => {
     btn.addEventListener('click', function() {
         deleteCustomerId = this.dataset.customerId;
@@ -159,56 +454,310 @@ document.querySelectorAll('.btn-delete').forEach(btn => {
     });
 });
 
-// 确认删除
 document.getElementById('confirmDelete').addEventListener('click', async function() {
     if (!deleteCustomerId) return;
-    
     try {
-        const response = await fetch(`/api/customers/${deleteCustomerId}`, {
-            method: 'DELETE'
-        });
-        
+        const response = await fetch(`/api/customers/${deleteCustomerId}`, { method: 'DELETE' });
         if (response.ok) {
-            window.location.reload();
+            showToast('客户已移入回收站', 'success');
+            setTimeout(() => window.location.reload(), 500);
         } else {
-            alert('删除失败');
+            showToast('删除失败');
         }
     } catch (error) {
-        console.error('删除失败:', error);
-        alert('删除失败');
+        showToast('删除失败');
     }
 });
 
-// AI分析按钮
+// ============ 批量选择 ============
+const selectAllCb = document.getElementById('selectAll');
+const batchBar = document.getElementById('batchActionBar');
+const batchCountEl = document.getElementById('batchSelectedCount');
+const batchStatusSelect = document.getElementById('batchStatusSelect');
+const batchStatusBtn = document.getElementById('batchStatusBtn');
+
+function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.row-checkbox:checked')).map(cb => parseInt(cb.value));
+}
+
+function updateBatchBar() {
+    const ids = getSelectedIds();
+    if (ids.length > 0) {
+        batchBar.style.display = 'flex';
+        batchCountEl.textContent = ids.length;
+    } else {
+        batchBar.style.display = 'none';
+    }
+}
+
+if (selectAllCb) {
+    selectAllCb.addEventListener('change', function() {
+        document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = this.checked);
+        updateBatchBar();
+    });
+}
+
+document.querySelectorAll('.row-checkbox').forEach(cb => {
+    cb.addEventListener('change', updateBatchBar);
+});
+
+batchStatusSelect.addEventListener('change', function() {
+    batchStatusBtn.disabled = !this.value;
+});
+
+document.getElementById('batchCancelBtn').addEventListener('click', function() {
+    document.querySelectorAll('.row-checkbox').forEach(cb => cb.checked = false);
+    if (selectAllCb) selectAllCb.checked = false;
+    updateBatchBar();
+});
+
+// 批量修改状态
+batchStatusBtn.addEventListener('click', async function() {
+    const ids = getSelectedIds();
+    const status = batchStatusSelect.value;
+    if (!ids.length || !status) return;
+
+    this.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    try {
+        const resp = await fetch('/api/customers/batch/status', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_ids: ids, status: status })
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            showToast(data.message, 'success');
+            setTimeout(() => window.location.reload(), 500);
+        } else {
+            showToast('批量修改失败');
+        }
+    } catch (e) {
+        showToast('批量修改失败');
+    } finally {
+        this.disabled = false;
+        this.innerHTML = '<i class="bi bi-arrow-repeat"></i> 修改状态';
+    }
+});
+
+// 批量删除
+document.getElementById('batchDeleteBtn').addEventListener('click', function() {
+    const ids = getSelectedIds();
+    document.getElementById('batchDeleteCount').textContent = ids.length;
+    new bootstrap.Modal(document.getElementById('batchDeleteModal')).show();
+});
+
+document.getElementById('confirmBatchDelete').addEventListener('click', async function() {
+    const ids = getSelectedIds();
+    if (!ids.length) return;
+    this.disabled = true;
+    try {
+        const resp = await fetch('/api/customers/batch/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ customer_ids: ids })
+        });
+        if (resp.ok) {
+            const data = await resp.json();
+            showToast(data.message, 'success');
+            setTimeout(() => window.location.reload(), 500);
+        } else {
+            showToast('批量删除失败');
+        }
+    } catch (e) {
+        showToast('批量删除失败');
+    } finally {
+        this.disabled = false;
+    }
+});
+
+// ============ 表头排序（客户端） ============
+document.querySelectorAll('.sortable').forEach(th => {
+    th.addEventListener('click', function() {
+        const table = this.closest('table');
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        const col = parseInt(this.dataset.col);
+        const type = this.dataset.type;
+        const isAsc = this.classList.contains('asc');
+
+        table.querySelectorAll('.sortable').forEach(h => h.classList.remove('asc', 'desc'));
+        this.classList.add(isAsc ? 'desc' : 'asc');
+
+        rows.sort((a, b) => {
+            const aText = a.children[col].textContent.trim();
+            const bText = b.children[col].textContent.trim();
+            let cmp = 0;
+            if (type === 'number') {
+                cmp = (parseInt(aText) || 0) - (parseInt(bText) || 0);
+            } else if (type === 'date') {
+                const aDate = aText === '-' ? '' : aText;
+                const bDate = bText === '-' ? '' : bText;
+                cmp = aDate.localeCompare(bDate);
+            } else {
+                cmp = aText.localeCompare(bText, 'zh');
+            }
+            return isAsc ? -cmp : cmp;
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+    });
+});
+
+// ============ AI分析按钮 ============
 document.querySelectorAll('.btn-analyze').forEach(btn => {
     btn.addEventListener('click', async function() {
         const customerId = this.dataset.customerId;
         const button = this;
-        
+
         button.disabled = true;
         button.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-        
+
         try {
-            const response = await fetch(`/api/analyze/${customerId}`, {
-                method: 'POST'
-            });
-            
+            const response = await fetch(`/api/analyze/${customerId}`, { method: 'POST' });
             if (response.ok) {
                 window.location.href = `/customers/${customerId}`;
             } else {
                 const data = await response.json();
-                alert(data.detail || 'AI分析失败');
+                showToast(data.detail || 'AI分析失败');
                 button.disabled = false;
                 button.innerHTML = '<i class="bi bi-robot"></i>';
             }
         } catch (error) {
-            console.error('分析失败:', error);
-            alert('AI分析失败');
+            showToast('AI分析失败');
             button.disabled = false;
             button.innerHTML = '<i class="bi bi-robot"></i>';
         }
     });
 });
+
+// ============ CSV 导出 ============
+document.getElementById('doExportBtn').addEventListener('click', function() {
+    const fields = [];
+    if (document.getElementById('exportBasic').checked) fields.push('basic');
+    if (document.getElementById('exportKyc').checked) fields.push('kyc');
+    if (document.getElementById('exportAiReport').checked) fields.push('ai_report');
+
+    if (fields.length === 0) {
+        showToast('请至少选择一项导出内容', 'warning');
+        return;
+    }
+
+    let url = `/api/export/customers?fields=${fields.join(',')}`;
+    const currentStatus = '{{ current_status or "" }}';
+    if (currentStatus) {
+        url += `&status=${encodeURIComponent(currentStatus)}`;
+    }
+
+    window.location.href = url;
+    bootstrap.Modal.getInstance(document.getElementById('exportModal')).hide();
+});
+
+// ============ 视图切换 ============
+const listViewEl = document.getElementById('listView');
+const kanbanViewEl = document.getElementById('kanbanView');
+const listViewBtn = document.getElementById('listViewBtn');
+const kanbanViewBtn = document.getElementById('kanbanViewBtn');
+
+function switchView(view) {
+    if (view === 'kanban') {
+        listViewEl.style.display = 'none';
+        kanbanViewEl.style.display = 'block';
+        listViewBtn.classList.remove('active');
+        kanbanViewBtn.classList.add('active');
+        updateKanbanCounts();
+        // 看板需要全量数据，如果当前分页不是全量则提示
+        {% if total > page_size %}
+        if (!window._kanbanWarned) {
+            showToast('看板视图仅显示当前页 {{ customers|length }} 条数据（共 {{ total }} 条）', 'warning');
+            window._kanbanWarned = true;
+        }
+        {% endif %}
+    } else {
+        listViewEl.style.display = 'block';
+        kanbanViewEl.style.display = 'none';
+        listViewBtn.classList.add('active');
+        kanbanViewBtn.classList.remove('active');
+    }
+    try { localStorage.setItem('crm_view_preference', view); } catch(e) {}
+}
+
+listViewBtn.addEventListener('click', () => switchView('list'));
+kanbanViewBtn.addEventListener('click', () => switchView('kanban'));
+
+// 恢复视图偏好
+try {
+    const savedView = localStorage.getItem('crm_view_preference');
+    if (savedView === 'kanban') switchView('kanban');
+} catch(e) {}
+
+// ============ 看板计数 ============
+function updateKanbanCounts() {
+    document.querySelectorAll('.kanban-column').forEach(col => {
+        const cards = col.querySelectorAll('.kanban-card').length;
+        col.querySelector('.kanban-count').textContent = cards;
+    });
+}
+updateKanbanCounts();
+
+// ============ 看板拖拽 ============
+let draggedCard = null;
+
+document.querySelectorAll('.kanban-card').forEach(card => {
+    card.addEventListener('dragstart', function(e) {
+        draggedCard = this;
+        this.style.opacity = '0.5';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', this.dataset.customerId);
+    });
+    card.addEventListener('dragend', function() {
+        this.style.opacity = '1';
+        draggedCard = null;
+        document.querySelectorAll('.kanban-column-body').forEach(col => col.classList.remove('drag-over'));
+    });
+});
+
+document.querySelectorAll('.kanban-column-body').forEach(colBody => {
+    colBody.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        this.classList.add('drag-over');
+    });
+    colBody.addEventListener('dragleave', function() {
+        this.classList.remove('drag-over');
+    });
+    colBody.addEventListener('drop', async function(e) {
+        e.preventDefault();
+        this.classList.remove('drag-over');
+        if (!draggedCard) return;
+
+        const newStatus = this.dataset.status;
+        const oldStatus = draggedCard.dataset.status;
+        const cid = draggedCard.dataset.customerId;
+
+        if (newStatus === oldStatus) return;
+
+        // 乐观 UI：立即移动
+        this.appendChild(draggedCard);
+        draggedCard.dataset.status = newStatus;
+        updateKanbanCounts();
+
+        try {
+            const response = await fetch(`/api/customers/${cid}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            if (!response.ok) throw new Error('更新失败');
+            showToast(`已将客户移至「${newStatus}」`, 'success');
+        } catch (error) {
+            const oldCol = document.querySelector(`.kanban-column-body[data-status="${oldStatus}"]`);
+            if (oldCol) oldCol.appendChild(draggedCard);
+            draggedCard.dataset.status = oldStatus;
+            updateKanbanCounts();
+            showToast('状态更新失败，已回滚', 'error');
+        }
+    });
+});
 </script>
 {% endblock %}
-

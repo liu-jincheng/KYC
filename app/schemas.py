@@ -60,6 +60,8 @@ class CustomerResponse(BaseModel):
     related_contacts: Optional[List[dict]] = None
     next_follow_up: Optional[dt_date] = None
     owner_user_id: Optional[int] = None
+    is_deleted: int = 0
+    deleted_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -71,6 +73,9 @@ class CustomerListResponse(BaseModel):
     """客户列表响应"""
     total: int
     items: List[CustomerResponse]
+    page: int = 1
+    page_size: int = 20
+    total_pages: int = 1
 
 
 # ============ 表单配置相关 Schema ============
@@ -258,4 +263,59 @@ class LoginResponse(BaseModel):
     success: bool
     message: str
     user: Optional[UserResponse] = None
+
+
+# ============ 活动日志相关 Schema ============
+
+class ActivityLogResponse(BaseModel):
+    """活动日志响应"""
+    id: int
+    customer_id: Optional[int] = None
+    user_id: Optional[int] = None
+    user_display_name: Optional[str] = None
+    action_type: str
+    action_detail: Optional[dict] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ActivityLogListResponse(BaseModel):
+    """活动日志列表响应"""
+    total: int
+    items: List[ActivityLogResponse]
+
+
+# ============ 批量操作相关 Schema ============
+
+class BatchStatusUpdate(BaseModel):
+    """批量修改状态请求"""
+    customer_ids: List[int] = Field(..., description="客户ID列表")
+    status: CustomerStatusEnum = Field(..., description="目标状态")
+
+
+class BatchDeleteRequest(BaseModel):
+    """批量删除请求"""
+    customer_ids: List[int] = Field(..., description="客户ID列表")
+
+
+class BatchRestoreRequest(BaseModel):
+    """批量恢复请求"""
+    customer_ids: List[int] = Field(..., description="客户ID列表")
+
+
+class BatchOperationResponse(BaseModel):
+    """批量操作响应"""
+    success: bool
+    message: str
+    affected_count: int
+
+
+# ============ 去重检测相关 Schema ============
+
+class DuplicateCheckResponse(BaseModel):
+    """客户去重检测响应"""
+    has_duplicate: bool
+    duplicates: List[dict] = Field(default_factory=list, description="相似客户列表")
 

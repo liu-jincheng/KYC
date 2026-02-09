@@ -4,12 +4,15 @@ AI 分析 API 路由
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from typing import Optional
 import json
 
 from app.database import get_db
-from app.models import Customer, CustomerStatus
+from app.models import Customer, CustomerStatus, User
 from app.schemas import AnalyzeResponse
 from app.services.coze_service import analyze_customer_kyc, analyze_customer_kyc_stream
+from app.services.auth_service import get_current_user_optional
+from app.services.activity_service import log_activity
 
 router = APIRouter()
 
@@ -17,6 +20,7 @@ router = APIRouter()
 @router.post("/{customer_id}", response_model=AnalyzeResponse)
 async def analyze_customer(
     customer_id: int,
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """
@@ -38,19 +42,27 @@ async def analyze_customer(
     
     # 更新状态为分析中
     customer.status = CustomerStatus.ANALYZING.value
+    log_activity(
+        db, customer_id, "ai_analysis_triggered",
+        user_id=current_user.id if current_user else None
+    )
     db.commit()
-    
+
     try:
         # 调用 Coze 服务进行分析
         result = await analyze_customer_kyc(
             kyc_data=customer.kyc_data,
             related_contacts=customer.related_contacts
         )
-        
+
         # 更新客户记录
         customer.ai_report = result.get("report", "")
         customer.ai_opportunities = result.get("opportunities", [])
         customer.status = CustomerStatus.REPORTED.value
+        log_activity(
+            db, customer_id, "ai_analysis_completed",
+            user_id=current_user.id if current_user else None
+        )
         db.commit()
         db.refresh(customer)
         
@@ -65,8 +77,13 @@ async def analyze_customer(
     except Exception as e:
         # 分析失败，恢复状态
         customer.status = CustomerStatus.PENDING.value
+        log_activity(
+            db, customer_id, "ai_analysis_failed",
+            {"error": str(e)},
+            user_id=current_user.id if current_user else None
+        )
         db.commit()
-        
+
         raise HTTPException(
             status_code=500,
             detail=f"AI 分析失败: {str(e)}"
@@ -76,6 +93,7 @@ async def analyze_customer(
 @router.post("/{customer_id}/stream")
 async def analyze_customer_stream(
     customer_id: int,
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db)
 ):
     """
@@ -94,8 +112,13 @@ async def analyze_customer_stream(
     
     # 更新状态为分析中
     customer.status = CustomerStatus.ANALYZING.value
+    user_id = current_user.id if current_user else None
+    log_activity(
+        db, customer_id, "ai_analysis_triggered",
+        user_id=user_id
+    )
     db.commit()
-    
+
     # 保存客户数据用于流式处理
     kyc_data = customer.kyc_data
     related_contacts = customer.related_contacts
@@ -133,6 +156,10 @@ async def analyze_customer_stream(
                     db_customer.ai_report = accumulated_content
                     db_customer.ai_opportunities = []
                     db_customer.status = CustomerStatus.REPORTED.value
+                    log_activity(
+                        new_db, customer_id, "ai_analysis_completed",
+                        user_id=user_id
+                    )
                     new_db.commit()
                     print(f"✅ 客户 {customer_id} 报告已保存，长度: {len(accumulated_content)}")
         
@@ -144,6 +171,11 @@ async def analyze_customer_stream(
                 db_customer = new_db.query(Customer).filter(Customer.id == customer_id).first()
                 if db_customer:
                     db_customer.status = CustomerStatus.PENDING.value
+                    log_activity(
+                        new_db, customer_id, "ai_analysis_failed",
+                        {"error": str(e)},
+                        user_id=user_id
+                    )
                     new_db.commit()
             
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"

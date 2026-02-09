@@ -78,22 +78,26 @@ class Customer(Base):
     __tablename__ = "customers"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), nullable=False)                  # 客户姓名
+    name = Column(String(100), nullable=False, index=True)       # 客户姓名
     kyc_data = Column(JSON, nullable=True)                      # KYC表单原始数据
-    status = Column(String(20), default=CustomerStatus.PENDING.value)  # 状态
+    status = Column(String(20), default=CustomerStatus.PENDING.value, index=True)  # 状态
     ai_report = Column(Text, nullable=True)                     # AI分析报告(Markdown)
     ai_opportunities = Column(JSON, nullable=True)              # AI商机挖掘结果
     
     # [预留字段] 用于存储客户生日，MVP阶段默认为空
     # 后续可通过接口更新，用于生日提醒功能
-    birthday = Column(Date, nullable=True)
+    birthday = Column(Date, nullable=True, index=True)
     
     related_contacts = Column(JSON, nullable=True)              # 关联人信息
-    next_follow_up = Column(Date, nullable=True)                # 下次跟进日期
+    next_follow_up = Column(Date, nullable=True, index=True)     # 下次跟进日期
     
     # 客户归属：关联到负责的顾问用户
     owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     
+    # 软删除
+    is_deleted = Column(Integer, default=0, index=True)
+    deleted_at = Column(DateTime, nullable=True)
+
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
 
@@ -117,6 +121,20 @@ class FormInvite(Base):
     def generate_token() -> str:
         """生成安全的随机令牌"""
         return secrets.token_urlsafe(32)
+
+
+class ActivityLog(Base):
+    """
+    活动日志表 - 记录客户相关的所有操作
+    """
+    __tablename__ = "activity_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    action_type = Column(String(50), nullable=False, index=True)
+    action_detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
 
 
 class CozeOAuthToken(Base):

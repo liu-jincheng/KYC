@@ -1,17 +1,19 @@
 """
 FastAPI 应用入口
 """
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
+from typing import Optional
+import math
 import markdown
 
 from app.config import settings
 from app.database import init_db, get_db, SessionLocal
 from app.models import Customer, FormTemplate, CustomerStatus, FormInvite, User
-from app.routers import customers, forms, analyze, dashboard, ai, invites, auth, coze_auth
+from app.routers import customers, forms, analyze, dashboard, ai, invites, auth, coze_auth, activity, export
 from app.services.auth_service import get_current_user_from_request
 
 
@@ -48,6 +50,8 @@ app.include_router(ai.router, prefix="/api/ai", tags=["ai"])
 app.include_router(invites.router, prefix="/api/invites", tags=["invites"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(coze_auth.router, tags=["coze_auth"])
+app.include_router(activity.router, prefix="/api/activity", tags=["activity"])
+app.include_router(export.router, prefix="/api/export", tags=["export"])
 
 
 # Jinja2 自定义过滤器
@@ -67,12 +71,13 @@ templates.env.filters['markdown'] = markdown_filter
 async def index(request: Request):
     """首页仪表盘"""
     current_user = get_current_user_from_request(request)
-    
+
     db = SessionLocal()
     try:
-        # 根据用户权限构建查询
-        from sqlalchemy import or_
-        base_query = db.query(Customer)
+        from sqlalchemy import or_, func
+
+        # 基础查询：排除已删除
+        base_query = db.query(Customer).filter(Customer.is_deleted == 0)
         if current_user and not current_user.is_admin:
             base_query = base_query.filter(
                 or_(
@@ -80,21 +85,42 @@ async def index(request: Request):
                     Customer.owner_user_id.is_(None)
                 )
             )
-        
-        # 获取统计数据
-        total = base_query.count()
+
+        # 使用 GROUP BY 优化统计查询
+        status_counts = (
+            base_query
+            .with_entities(Customer.status, func.count(Customer.id))
+            .group_by(Customer.status)
+            .all()
+        )
+        counts = dict(status_counts)
+        total = sum(counts.values())
+
         stats = {
             "total": total,
-            "pending": base_query.filter(Customer.status == CustomerStatus.PENDING.value).count(),
-            "analyzing": base_query.filter(Customer.status == CustomerStatus.ANALYZING.value).count(),
-            "reported": base_query.filter(Customer.status == CustomerStatus.REPORTED.value).count(),
-            "following": base_query.filter(Customer.status == CustomerStatus.FOLLOWING.value).count(),
-            "signed": base_query.filter(Customer.status == CustomerStatus.SIGNED.value).count(),
+            "pending": counts.get(CustomerStatus.PENDING.value, 0),
+            "analyzing": counts.get(CustomerStatus.ANALYZING.value, 0),
+            "reported": counts.get(CustomerStatus.REPORTED.value, 0),
+            "following": counts.get(CustomerStatus.FOLLOWING.value, 0),
+            "signed": counts.get(CustomerStatus.SIGNED.value, 0),
         }
-        
+
         # 获取最近客户
-        recent_customers = base_query.order_by(Customer.created_at.desc()).limit(5).all()
-        
+        recent_customers = (
+            db.query(Customer)
+            .filter(Customer.is_deleted == 0)
+            .order_by(Customer.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        if current_user and not current_user.is_admin:
+            recent_customers = (
+                base_query
+                .order_by(Customer.created_at.desc())
+                .limit(5)
+                .all()
+            )
+
         return templates.TemplateResponse("dashboard.html", {
             "request": request,
             "current_user": current_user,
@@ -107,15 +133,24 @@ async def index(request: Request):
 
 
 @app.get("/customers", response_class=HTMLResponse)
-async def customer_list_page(request: Request, status: str = None):
+async def customer_list_page(
+    request: Request,
+    status: str = None,
+    search: str = None,
+    owner_id: Optional[int] = None,
+    date_from: str = None,
+    date_to: str = None,
+    page: int = 1,
+    page_size: int = 20
+):
     """客户列表页"""
     current_user = get_current_user_from_request(request)
-    
+
     db = SessionLocal()
     try:
         from sqlalchemy import or_
-        query = db.query(Customer)
-        
+        query = db.query(Customer).filter(Customer.is_deleted == 0)
+
         # 权限过滤
         if current_user and not current_user.is_admin:
             query = query.filter(
@@ -124,18 +159,62 @@ async def customer_list_page(request: Request, status: str = None):
                     Customer.owner_user_id.is_(None)
                 )
             )
-        
+
         if status:
             query = query.filter(Customer.status == status)
-        customers_list = query.order_by(Customer.created_at.desc()).all()
-        
+
+        if search:
+            query = query.filter(Customer.name.ilike(f"%{search}%"))
+
+        if owner_id is not None:
+            if owner_id == 0:
+                query = query.filter(Customer.owner_user_id.is_(None))
+            else:
+                query = query.filter(Customer.owner_user_id == owner_id)
+
+        if date_from:
+            try:
+                from datetime import datetime
+                d = datetime.strptime(date_from, "%Y-%m-%d")
+                query = query.filter(Customer.created_at >= d)
+            except ValueError:
+                pass
+
+        if date_to:
+            try:
+                from datetime import datetime, timedelta
+                d = datetime.strptime(date_to, "%Y-%m-%d")
+                query = query.filter(Customer.created_at < d + timedelta(days=1))
+            except ValueError:
+                pass
+
+        total = query.count()
+        total_pages = max(1, math.ceil(total / page_size))
+        skip = (page - 1) * page_size
+        customers_list = query.order_by(Customer.created_at.desc()).offset(skip).limit(page_size).all()
+
+        # 用户映射（用于看板视图显示顾问名称）
+        all_users = db.query(User).all()
+        users_map = {u.id: (u.display_name or u.username) for u in all_users}
+
         return templates.TemplateResponse("customer_list.html", {
             "request": request,
             "current_user": current_user,
             "customers": customers_list,
             "current_status": status,
             "statuses": [s.value for s in CustomerStatus],
-            "page_title": "客户列表"
+            "users_map": users_map,
+            "page_title": "客户列表",
+            # 分页相关
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            # 筛选条件回传
+            "search": search or "",
+            "owner_id": owner_id,
+            "date_from": date_from or "",
+            "date_to": date_to or "",
         })
     finally:
         db.close()
@@ -145,17 +224,17 @@ async def customer_list_page(request: Request, status: str = None):
 async def customer_new_page(request: Request):
     """新建客户页"""
     current_user = get_current_user_from_request(request)
-    
+
     db = SessionLocal()
     try:
         # 获取当前激活的表单配置
         form_template = db.query(FormTemplate).filter(FormTemplate.is_active == 1).first()
-        
+
         # 如果是管理员，获取所有用户列表（用于分配客户归属）
         users_list = []
         if current_user and current_user.is_admin:
             users_list = db.query(User).filter(User.is_active == 1).all()
-        
+
         return templates.TemplateResponse("customer_form.html", {
             "request": request,
             "current_user": current_user,
@@ -172,10 +251,13 @@ async def customer_new_page(request: Request):
 async def customer_detail_page(request: Request, customer_id: int):
     """客户详情页"""
     current_user = get_current_user_from_request(request)
-    
+
     db = SessionLocal()
     try:
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.is_deleted == 0
+        ).first()
         if not customer:
             return templates.TemplateResponse("error.html", {
                 "request": request,
@@ -183,7 +265,7 @@ async def customer_detail_page(request: Request, customer_id: int):
                 "message": "客户不存在",
                 "page_title": "错误"
             })
-        
+
         # 权限检查
         from app.services.auth_service import check_customer_access
         if current_user and not check_customer_access(customer.owner_user_id, current_user):
@@ -193,15 +275,15 @@ async def customer_detail_page(request: Request, customer_id: int):
                 "message": "无权访问此客户",
                 "page_title": "权限不足"
             })
-        
+
         # 获取表单配置用于显示标签
         form_template = db.query(FormTemplate).filter(FormTemplate.is_active == 1).first()
-        
+
         # 获取客户归属用户信息
         owner_user = None
         if customer.owner_user_id:
             owner_user = db.query(User).filter(User.id == customer.owner_user_id).first()
-        
+
         return templates.TemplateResponse("customer_detail.html", {
             "request": request,
             "current_user": current_user,
@@ -219,10 +301,13 @@ async def customer_detail_page(request: Request, customer_id: int):
 async def customer_edit_page(request: Request, customer_id: int):
     """编辑客户页"""
     current_user = get_current_user_from_request(request)
-    
+
     db = SessionLocal()
     try:
-        customer = db.query(Customer).filter(Customer.id == customer_id).first()
+        customer = db.query(Customer).filter(
+            Customer.id == customer_id,
+            Customer.is_deleted == 0
+        ).first()
         if not customer:
             return templates.TemplateResponse("error.html", {
                 "request": request,
@@ -230,7 +315,7 @@ async def customer_edit_page(request: Request, customer_id: int):
                 "message": "客户不存在",
                 "page_title": "错误"
             })
-        
+
         # 权限检查
         from app.services.auth_service import check_customer_access
         if current_user and not check_customer_access(customer.owner_user_id, current_user):
@@ -240,14 +325,14 @@ async def customer_edit_page(request: Request, customer_id: int):
                 "message": "无权编辑此客户",
                 "page_title": "权限不足"
             })
-        
+
         form_template = db.query(FormTemplate).filter(FormTemplate.is_active == 1).first()
-        
+
         # 如果是管理员，获取所有用户列表（用于分配客户归属）
         users_list = []
         if current_user and current_user.is_admin:
             users_list = db.query(User).filter(User.is_active == 1).all()
-        
+
         return templates.TemplateResponse("customer_form.html", {
             "request": request,
             "current_user": current_user,
@@ -260,19 +345,69 @@ async def customer_edit_page(request: Request, customer_id: int):
         db.close()
 
 
+@app.get("/recycle-bin", response_class=HTMLResponse)
+async def recycle_bin_page(
+    request: Request,
+    page: int = 1,
+    page_size: int = 20
+):
+    """回收站页面"""
+    current_user = get_current_user_from_request(request)
+
+    db = SessionLocal()
+    try:
+        from sqlalchemy import or_
+        query = db.query(Customer).filter(Customer.is_deleted == 1)
+
+        # 权限过滤
+        if current_user and not current_user.is_admin:
+            query = query.filter(
+                or_(
+                    Customer.owner_user_id == current_user.id,
+                    Customer.owner_user_id.is_(None)
+                )
+            )
+
+        total = query.count()
+        total_pages = max(1, math.ceil(total / page_size))
+        skip = (page - 1) * page_size
+        customers_list = query.order_by(Customer.deleted_at.desc()).offset(skip).limit(page_size).all()
+
+        # 用户映射
+        all_users = db.query(User).all()
+        users_map = {u.id: (u.display_name or u.username) for u in all_users}
+
+        return templates.TemplateResponse("recycle_bin.html", {
+            "request": request,
+            "current_user": current_user,
+            "customers": customers_list,
+            "users_map": users_map,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "page_title": "回收站"
+        })
+    finally:
+        db.close()
+
+
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     """表单配置页"""
     current_user = get_current_user_from_request(request)
-    
+
     db = SessionLocal()
     try:
         form_template = db.query(FormTemplate).filter(FormTemplate.is_active == 1).first()
-        
+
+        is_admin = current_user and current_user.is_admin
+
         return templates.TemplateResponse("settings.html", {
             "request": request,
             "current_user": current_user,
             "form_template": form_template,
+            "is_admin": is_admin,
             "page_title": "表单设置"
         })
     finally:
@@ -300,7 +435,7 @@ async def login_page(request: Request):
     if current_user:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url="/", status_code=302)
-    
+
     return templates.TemplateResponse("login.html", {
         "request": request,
         "page_title": "登录"
@@ -311,22 +446,22 @@ async def login_page(request: Request):
 async def admin_users_page(request: Request):
     """用户管理页（管理员）"""
     current_user = get_current_user_from_request(request)
-    
+
     if not current_user:
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url="/login", status_code=302)
-    
+
     if not current_user.is_admin:
         return templates.TemplateResponse("error.html", {
             "request": request,
             "message": "需要管理员权限",
             "page_title": "权限不足"
         })
-    
+
     db = SessionLocal()
     try:
         users = db.query(User).order_by(User.created_at.desc()).all()
-        
+
         return templates.TemplateResponse("admin_users.html", {
             "request": request,
             "current_user": current_user,
@@ -343,21 +478,21 @@ async def admin_users_page(request: Request):
 async def external_fill_page(request: Request, token: str):
     """
     外部客户填写页面
-    
+
     通过邀请链接访问的公开表单页面
     """
     from datetime import datetime
-    
+
     db = SessionLocal()
     try:
         # 查找邀请记录
         invite = db.query(FormInvite).filter(FormInvite.token == token).first()
-        
+
         # 验证邀请有效性
         error_message = None
         customer_name = None
         form_schema = None
-        
+
         if not invite:
             error_message = "邀请链接无效，请联系您的顾问获取正确的链接。"
         elif invite.used_at is not None:
@@ -376,7 +511,7 @@ async def external_fill_page(request: Request, token: str):
                 # 获取当前激活的表单配置
                 form_template = db.query(FormTemplate).filter(FormTemplate.is_active == 1).first()
                 form_schema = form_template.schema if form_template else None
-        
+
         if error_message:
             return templates.TemplateResponse("fill_form.html", {
                 "request": request,
@@ -386,7 +521,7 @@ async def external_fill_page(request: Request, token: str):
                 "form_schema": None,
                 "page_title": "表单填写"
             })
-        
+
         return templates.TemplateResponse("fill_form.html", {
             "request": request,
             "error_message": None,

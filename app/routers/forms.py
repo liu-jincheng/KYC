@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import FormTemplate
+from app.models import FormTemplate, User
 from app.schemas import FormTemplateResponse, FormTemplateUpdate
+from app.services.auth_service import require_admin
 
 router = APIRouter()
 
@@ -15,10 +16,10 @@ router = APIRouter()
 def get_active_form(db: Session = Depends(get_db)):
     """获取当前激活的表单配置"""
     form = db.query(FormTemplate).filter(FormTemplate.is_active == 1).first()
-    
+
     if not form:
         raise HTTPException(status_code=404, detail="未找到激活的表单配置")
-    
+
     return FormTemplateResponse.model_validate(form)
 
 
@@ -26,10 +27,10 @@ def get_active_form(db: Session = Depends(get_db)):
 def get_form(form_id: int, db: Session = Depends(get_db)):
     """获取指定表单配置"""
     form = db.query(FormTemplate).filter(FormTemplate.id == form_id).first()
-    
+
     if not form:
         raise HTTPException(status_code=404, detail="表单配置不存在")
-    
+
     return FormTemplateResponse.model_validate(form)
 
 
@@ -37,22 +38,23 @@ def get_form(form_id: int, db: Session = Depends(get_db)):
 def update_form(
     form_id: int,
     form_data: FormTemplateUpdate,
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    """更新表单配置"""
+    """更新表单配置（仅管理员）"""
     form = db.query(FormTemplate).filter(FormTemplate.id == form_id).first()
-    
+
     if not form:
         raise HTTPException(status_code=404, detail="表单配置不存在")
-    
+
     # 更新非空字段
     if form_data.name is not None:
         form.name = form_data.name
     if form_data.schema is not None:
         form.schema = form_data.schema
-    
+
     db.commit()
     db.refresh(form)
-    
+
     return FormTemplateResponse.model_validate(form)
 

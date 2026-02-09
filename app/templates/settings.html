@@ -78,20 +78,22 @@
     </div>
     
     <div class="col-lg-4">
-        <!-- JSON 编辑器 -->
+        {% if is_admin %}
+        <!-- JSON 编辑器（仅管理员可见） -->
         <div class="card mb-4">
             <div class="card-header">
                 <h5 class="mb-0"><i class="bi bi-code-slash"></i> JSON 编辑器</h5>
             </div>
             <div class="card-body">
                 <p class="text-muted small">
-                    高级用户可直接编辑 JSON 配置来修改表单结构。
+                    管理员可直接编辑 JSON 配置来修改表单结构。
                 </p>
                 <button class="btn btn-outline-primary w-100" data-bs-toggle="modal" data-bs-target="#jsonEditorModal">
                     <i class="bi bi-pencil-square"></i> 编辑 JSON
                 </button>
             </div>
         </div>
+        {% endif %}
         
         <!-- 操作说明 -->
         <div class="card">
@@ -119,6 +121,7 @@
     </div>
 </div>
 
+{% if is_admin %}
 <!-- JSON 编辑器模态框 -->
 <div class="modal fade" id="jsonEditorModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -132,42 +135,86 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-warning" id="formatJson">格式化</button>
                 <button type="button" class="btn btn-primary" id="saveJson">保存配置</button>
             </div>
         </div>
     </div>
 </div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
+{% if is_admin %}
 <script>
 const formId = {{ form_template.id if form_template else 'null' }};
 
-// 格式化 JSON
-document.getElementById('formatJson').addEventListener('click', function() {
+// 打开模态框时自动格式化 JSON
+document.getElementById('jsonEditorModal').addEventListener('shown.bs.modal', function() {
     const editor = document.getElementById('jsonEditor');
     try {
         const json = JSON.parse(editor.value);
         editor.value = JSON.stringify(json, null, 2);
     } catch (e) {
-        alert('JSON 格式错误: ' + e.message);
+        // JSON 已经格式化或为空，保持原样
     }
 });
+
+// 校验表单 JSON 结构
+function validateFormSchema(schema) {
+    const errors = [];
+
+    if (!schema.sections || !Array.isArray(schema.sections)) {
+        errors.push('缺少 "sections" 数组');
+        return errors;
+    }
+
+    schema.sections.forEach((section, i) => {
+        if (!section.title) {
+            errors.push(`第 ${i + 1} 个 section 缺少 "title"`);
+        }
+        if (!section.fields || !Array.isArray(section.fields)) {
+            errors.push(`第 ${i + 1} 个 section ("${section.title || '未命名'}") 缺少 "fields" 数组`);
+            return;
+        }
+        section.fields.forEach((field, j) => {
+            if (!field.name) errors.push(`"${section.title}" 的第 ${j + 1} 个字段缺少 "name"`);
+            if (!field.label) errors.push(`"${section.title}" 的第 ${j + 1} 个字段缺少 "label"`);
+            if (!field.type) errors.push(`"${section.title}" 的第 ${j + 1} 个字段缺少 "type"`);
+        });
+    });
+
+    return errors;
+}
 
 // 保存 JSON 配置
 document.getElementById('saveJson').addEventListener('click', async function() {
     const editor = document.getElementById('jsonEditor');
-    
+
+    let schema;
     try {
-        const schema = JSON.parse(editor.value);
-        
+        schema = JSON.parse(editor.value);
+    } catch (e) {
+        alert('JSON 格式错误: ' + e.message);
+        return;
+    }
+
+    // 校验结构
+    const errors = validateFormSchema(schema);
+    if (errors.length > 0) {
+        alert('表单结构校验失败:\n\n' + errors.join('\n'));
+        return;
+    }
+
+    // 格式化后回显
+    editor.value = JSON.stringify(schema, null, 2);
+
+    try {
         const response = await fetch(`/api/forms/${formId}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ schema: schema })
         });
-        
+
         if (response.ok) {
             alert('配置已保存');
             window.location.reload();
@@ -176,9 +223,10 @@ document.getElementById('saveJson').addEventListener('click', async function() {
             alert('保存失败: ' + (error.detail || '未知错误'));
         }
     } catch (e) {
-        alert('JSON 格式错误: ' + e.message);
+        alert('保存失败: ' + e.message);
     }
 });
 </script>
+{% endif %}
 {% endblock %}
 

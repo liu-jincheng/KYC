@@ -213,6 +213,18 @@
     </div>
 </form>
 
+<!-- Toast 消息提示 -->
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
+    <div id="messageToast" class="toast" role="alert">
+        <div class="toast-header">
+            <i class="bi bi-info-circle me-2" id="toastIcon"></i>
+            <strong class="me-auto" id="toastTitle">提示</strong>
+            <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body" id="toastMessage"></div>
+    </div>
+</div>
+
 <!-- 关联人模板 -->
 <template id="contactTemplate">
     <div class="contact-item border rounded p-2 mb-2">
@@ -241,6 +253,30 @@
 {% block extra_js %}
 <script>
 const customerId = {{ customer.id if customer else 'null' }};
+const messageToast = new bootstrap.Toast(document.getElementById('messageToast'), { delay: 3000 });
+
+function showToast(message, type = 'error') {
+    const toast = document.getElementById('messageToast');
+    const icon = document.getElementById('toastIcon');
+    const title = document.getElementById('toastTitle');
+    const body = document.getElementById('toastMessage');
+    toast.classList.remove('text-bg-success', 'text-bg-danger', 'text-bg-warning');
+    if (type === 'success') {
+        toast.classList.add('text-bg-success');
+        icon.className = 'bi bi-check-circle me-2';
+        title.textContent = '成功';
+    } else if (type === 'warning') {
+        toast.classList.add('text-bg-warning');
+        icon.className = 'bi bi-exclamation-triangle me-2';
+        title.textContent = '警告';
+    } else {
+        toast.classList.add('text-bg-danger');
+        icon.className = 'bi bi-x-circle me-2';
+        title.textContent = '错误';
+    }
+    body.textContent = message;
+    messageToast.show();
+}
 
 // 添加关联人
 document.getElementById('addContact').addEventListener('click', function() {
@@ -269,7 +305,7 @@ document.querySelectorAll('.multiselect-checkbox').forEach(checkbox => {
             const checked = document.querySelectorAll(`input[name="${fieldName}"]:checked`);
             if (checked.length > max) {
                 this.checked = false;
-                alert(`最多只能选择 ${max} 项`);
+                showToast(`最多只能选择 ${max} 项`, 'warning');
             }
         }
     });
@@ -356,6 +392,37 @@ function collectFormData() {
     }
 });
 
+// 客户姓名去重检测
+(function() {
+    // 找到"name"字段（KYC表单中的姓名输入框）
+    const nameInput = document.getElementById('name');
+    if (!nameInput || customerId) return; // 仅新建时检测
+
+    let dupWarning = document.createElement('div');
+    dupWarning.className = 'alert alert-warning mt-2 py-2 px-3 small';
+    dupWarning.style.display = 'none';
+    nameInput.parentNode.appendChild(dupWarning);
+
+    nameInput.addEventListener('blur', async function() {
+        const name = this.value.trim();
+        dupWarning.style.display = 'none';
+        if (!name) return;
+
+        try {
+            const resp = await fetch(`/api/customers/check-duplicate?name=${encodeURIComponent(name)}`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            if (data.has_duplicate) {
+                const links = data.duplicates.map(d =>
+                    `<a href="/customers/${d.id}" target="_blank">${d.name} (${d.status})</a>`
+                ).join('、');
+                dupWarning.innerHTML = `<i class="bi bi-exclamation-triangle me-1"></i>已存在同名客户：${links}，请确认是否重复录入。`;
+                dupWarning.style.display = 'block';
+            }
+        } catch (e) { /* ignore */ }
+    });
+})();
+
 // 表单提交
 document.getElementById('customerForm').addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -383,11 +450,11 @@ document.getElementById('customerForm').addEventListener('submit', async functio
             window.location.href = `/customers/${data.id}`;
         } else {
             const error = await response.json();
-            alert(error.detail || '保存失败');
+            showToast(error.detail || '保存失败');
         }
     } catch (error) {
         console.error('保存失败:', error);
-        alert('保存失败');
+        showToast('保存失败');
     } finally {
         saveBtn.disabled = false;
         saveBtn.innerHTML = '<i class="bi bi-check-circle"></i> 保存';
@@ -410,11 +477,11 @@ document.getElementById('analyzeBtn').addEventListener('click', async function()
             window.location.href = `/customers/${customerId}`;
         } else {
             const error = await response.json();
-            alert(error.detail || 'AI分析失败');
+            showToast(error.detail || 'AI分析失败');
         }
     } catch (error) {
         console.error('分析失败:', error);
-        alert('AI分析失败');
+        showToast('AI分析失败');
     } finally {
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-robot"></i> AI 分析';

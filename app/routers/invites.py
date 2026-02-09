@@ -10,6 +10,7 @@ from app.database import get_db
 from app.models import FormInvite, Customer, FormTemplate, User
 from app.schemas import InviteCreate, InviteResponse, InviteFormData, InviteValidateResponse
 from app.services.auth_service import get_current_user_optional, check_customer_access
+from app.services.activity_service import log_activity
 
 router = APIRouter()
 
@@ -54,7 +55,14 @@ def create_invite(
     db.add(invite)
     db.commit()
     db.refresh(invite)
-    
+
+    log_activity(
+        db, invite_data.customer_id, "invite_created",
+        {"expires_days": invite_data.expires_days},
+        user_id=current_user.id if current_user else None,
+        auto_commit=True
+    )
+
     # 构建完整的邀请链接
     base_url = str(request.base_url).rstrip("/")
     invite_url = f"{base_url}/fill/{invite.token}"
@@ -180,9 +188,16 @@ def submit_invite_form(
     
     # 标记邀请链接为已使用
     invite.used_at = datetime.now()
-    
+
     db.commit()
-    
+
+    # 记录活动日志（客户通过邀请链接提交了表单）
+    log_activity(
+        db, customer.id, "invite_used",
+        {"invite_id": invite.id},
+        auto_commit=True
+    )
+
     return {
         "success": True,
         "message": "表单提交成功",

@@ -37,6 +37,7 @@ def _get_follow_up_reminders(db: Session, today: date) -> list[ReminderItem]:
     # 查询 next_follow_up <= today 的客户
     customers = db.query(Customer).filter(
         and_(
+            Customer.is_deleted == 0,
             Customer.next_follow_up != None,
             Customer.next_follow_up <= today,
             Customer.status != CustomerStatus.SIGNED.value  # 已签约的不需要提醒
@@ -74,7 +75,10 @@ def _get_birthday_reminders(db: Session, today: date) -> list[ReminderItem]:
     
     # 只查询有生日数据的客户
     customers = db.query(Customer).filter(
-        Customer.birthday != None
+        and_(
+            Customer.is_deleted == 0,
+            Customer.birthday != None
+        )
     ).all()
     
     for customer in customers:
@@ -120,6 +124,7 @@ def _get_stale_analysis_reminders(db: Session, today: date) -> list[ReminderItem
     # 查询状态为"AI分析中"且更新时间超过3天的客户
     customers = db.query(Customer).filter(
         and_(
+            Customer.is_deleted == 0,
             Customer.status == CustomerStatus.ANALYZING.value,
             Customer.updated_at < three_days_ago
         )
