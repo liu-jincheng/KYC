@@ -4,7 +4,7 @@ FastAPI 应用入口
 from fastapi import FastAPI, Request, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from contextlib import asynccontextmanager
 from typing import Optional
 import math
@@ -14,7 +14,15 @@ from app.config import settings
 from app.database import init_db, get_db, SessionLocal
 from app.models import Customer, FormTemplate, CustomerStatus, FormInvite, User
 from app.routers import customers, forms, analyze, dashboard, ai, invites, auth, coze_auth, activity, export
-from app.services.auth_service import get_current_user_from_request
+from app.services.auth_service import get_current_user_from_request, check_customer_access
+
+
+def require_login(request: Request):
+    """页面路由登录检查，未登录则重定向到登录页"""
+    current_user = get_current_user_from_request(request)
+    if not current_user:
+        return None, RedirectResponse(url="/login", status_code=302)
+    return current_user, None
 
 
 @asynccontextmanager
@@ -70,7 +78,9 @@ templates.env.filters['markdown'] = markdown_filter
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     """首页仪表盘"""
-    current_user = get_current_user_from_request(request)
+    current_user, redirect = require_login(request)
+    if redirect:
+        return redirect
 
     db = SessionLocal()
     try:
@@ -78,7 +88,7 @@ async def index(request: Request):
 
         # 基础查询：排除已删除
         base_query = db.query(Customer).filter(Customer.is_deleted == 0)
-        if current_user and not current_user.is_admin:
+        if not current_user.is_admin:
             base_query = base_query.filter(
                 or_(
                     Customer.owner_user_id == current_user.id,
@@ -107,19 +117,11 @@ async def index(request: Request):
 
         # 获取最近客户
         recent_customers = (
-            db.query(Customer)
-            .filter(Customer.is_deleted == 0)
+            base_query
             .order_by(Customer.created_at.desc())
             .limit(5)
             .all()
         )
-        if current_user and not current_user.is_admin:
-            recent_customers = (
-                base_query
-                .order_by(Customer.created_at.desc())
-                .limit(5)
-                .all()
-            )
 
         return templates.TemplateResponse("dashboard.html", {
             "request": request,
@@ -144,7 +146,9 @@ async def customer_list_page(
     page_size: int = 20
 ):
     """客户列表页"""
-    current_user = get_current_user_from_request(request)
+    current_user, redirect = require_login(request)
+    if redirect:
+        return redirect
 
     db = SessionLocal()
     try:
@@ -152,7 +156,7 @@ async def customer_list_page(
         query = db.query(Customer).filter(Customer.is_deleted == 0)
 
         # 权限过滤
-        if current_user and not current_user.is_admin:
+        if not current_user.is_admin:
             query = query.filter(
                 or_(
                     Customer.owner_user_id == current_user.id,
@@ -223,7 +227,9 @@ async def customer_list_page(
 @app.get("/customers/new", response_class=HTMLResponse)
 async def customer_new_page(request: Request):
     """新建客户页"""
-    current_user = get_current_user_from_request(request)
+    current_user, redirect = require_login(request)
+    if redirect:
+        return redirect
 
     db = SessionLocal()
     try:
@@ -232,7 +238,7 @@ async def customer_new_page(request: Request):
 
         # 如果是管理员，获取所有用户列表（用于分配客户归属）
         users_list = []
-        if current_user and current_user.is_admin:
+        if current_user.is_admin:
             users_list = db.query(User).filter(User.is_active == 1).all()
 
         return templates.TemplateResponse("customer_form.html", {
@@ -250,7 +256,9 @@ async def customer_new_page(request: Request):
 @app.get("/customers/{customer_id}", response_class=HTMLResponse)
 async def customer_detail_page(request: Request, customer_id: int):
     """客户详情页"""
-    current_user = get_current_user_from_request(request)
+    current_user, redirect = require_login(request)
+    if redirect:
+        return redirect
 
     db = SessionLocal()
     try:
@@ -267,8 +275,7 @@ async def customer_detail_page(request: Request, customer_id: int):
             })
 
         # 权限检查
-        from app.services.auth_service import check_customer_access
-        if current_user and not check_customer_access(customer.owner_user_id, current_user):
+        if not check_customer_access(customer.owner_user_id, current_user):
             return templates.TemplateResponse("error.html", {
                 "request": request,
                 "current_user": current_user,
@@ -300,7 +307,9 @@ async def customer_detail_page(request: Request, customer_id: int):
 @app.get("/customers/{customer_id}/edit", response_class=HTMLResponse)
 async def customer_edit_page(request: Request, customer_id: int):
     """编辑客户页"""
-    current_user = get_current_user_from_request(request)
+    current_user, redirect = require_login(request)
+    if redirect:
+        return redirect
 
     db = SessionLocal()
     try:
@@ -317,8 +326,7 @@ async def customer_edit_page(request: Request, customer_id: int):
             })
 
         # 权限检查
-        from app.services.auth_service import check_customer_access
-        if current_user and not check_customer_access(customer.owner_user_id, current_user):
+        if not check_customer_access(customer.owner_user_id, current_user):
             return templates.TemplateResponse("error.html", {
                 "request": request,
                 "current_user": current_user,
@@ -330,7 +338,7 @@ async def customer_edit_page(request: Request, customer_id: int):
 
         # 如果是管理员，获取所有用户列表（用于分配客户归属）
         users_list = []
-        if current_user and current_user.is_admin:
+        if current_user.is_admin:
             users_list = db.query(User).filter(User.is_active == 1).all()
 
         return templates.TemplateResponse("customer_form.html", {
@@ -352,7 +360,9 @@ async def recycle_bin_page(
     page_size: int = 20
 ):
     """回收站页面"""
-    current_user = get_current_user_from_request(request)
+    current_user, redirect = require_login(request)
+    if redirect:
+        return redirect
 
     db = SessionLocal()
     try:
@@ -360,7 +370,7 @@ async def recycle_bin_page(
         query = db.query(Customer).filter(Customer.is_deleted == 1)
 
         # 权限过滤
-        if current_user and not current_user.is_admin:
+        if not current_user.is_admin:
             query = query.filter(
                 or_(
                     Customer.owner_user_id == current_user.id,
@@ -395,13 +405,15 @@ async def recycle_bin_page(
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     """表单配置页"""
-    current_user = get_current_user_from_request(request)
+    current_user, redirect = require_login(request)
+    if redirect:
+        return redirect
 
     db = SessionLocal()
     try:
         form_template = db.query(FormTemplate).filter(FormTemplate.is_active == 1).first()
 
-        is_admin = current_user and current_user.is_admin
+        is_admin = current_user.is_admin
 
         return templates.TemplateResponse("settings.html", {
             "request": request,
@@ -445,15 +457,14 @@ async def login_page(request: Request):
 @app.get("/admin/users", response_class=HTMLResponse)
 async def admin_users_page(request: Request):
     """用户管理页（管理员）"""
-    current_user = get_current_user_from_request(request)
-
-    if not current_user:
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url="/login", status_code=302)
+    current_user, redirect = require_login(request)
+    if redirect:
+        return redirect
 
     if not current_user.is_admin:
         return templates.TemplateResponse("error.html", {
             "request": request,
+            "current_user": current_user,
             "message": "需要管理员权限",
             "page_title": "权限不足"
         })

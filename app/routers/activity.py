@@ -8,7 +8,7 @@ from typing import Optional
 from app.database import get_db
 from app.models import ActivityLog, User, Customer
 from app.schemas import ActivityLogResponse, ActivityLogListResponse
-from app.services.auth_service import get_current_user_optional, check_customer_access
+from app.services.auth_service import get_current_user, check_customer_access
 
 router = APIRouter()
 
@@ -18,7 +18,7 @@ def get_activity_logs(
     customer_id: int,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -30,7 +30,7 @@ def get_activity_logs(
         raise HTTPException(status_code=404, detail="客户不存在")
 
     # 权限检查
-    if current_user and not check_customer_access(customer.owner_user_id, current_user):
+    if not check_customer_access(customer.owner_user_id, current_user):
         raise HTTPException(status_code=403, detail="无权查看此客户的操作记录")
 
     query = db.query(ActivityLog).filter(ActivityLog.customer_id == customer_id)

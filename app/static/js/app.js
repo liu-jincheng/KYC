@@ -3,44 +3,55 @@
  */
 
 // API 请求工具函数
+function handleAuthError(response) {
+    if (response.status === 401) {
+        window.location.href = '/login';
+        throw new Error('请先登录');
+    }
+}
+
 const api = {
     async get(url) {
         const response = await fetch(url);
+        handleAuthError(response);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || '请求失败');
         }
         return response.json();
     },
-    
+
     async post(url, data = {}) {
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
+        handleAuthError(response);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || '请求失败');
         }
         return response.json();
     },
-    
+
     async put(url, data = {}) {
         const response = await fetch(url, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
+        handleAuthError(response);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || '请求失败');
         }
         return response.json();
     },
-    
+
     async delete(url) {
         const response = await fetch(url, { method: 'DELETE' });
+        handleAuthError(response);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || '请求失败');

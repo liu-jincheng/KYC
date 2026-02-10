@@ -9,7 +9,7 @@ from typing import Optional
 from app.database import get_db
 from app.models import FormInvite, Customer, FormTemplate, User
 from app.schemas import InviteCreate, InviteResponse, InviteFormData, InviteValidateResponse
-from app.services.auth_service import get_current_user_optional, check_customer_access
+from app.services.auth_service import get_current_user, check_customer_access
 from app.services.activity_service import log_activity
 
 router = APIRouter()
@@ -19,7 +19,7 @@ router = APIRouter()
 def create_invite(
     invite_data: InviteCreate,
     request: Request,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -35,7 +35,7 @@ def create_invite(
         raise HTTPException(status_code=404, detail="客户不存在")
     
     # 权限检查
-    if current_user and not check_customer_access(customer.owner_user_id, current_user):
+    if not check_customer_access(customer.owner_user_id, current_user):
         raise HTTPException(status_code=403, detail="无权为此客户生成填写链接")
     
     # 计算过期时间
@@ -49,7 +49,7 @@ def create_invite(
         token=FormInvite.generate_token(),
         expires_at=expires_at,
         is_active=1,
-        created_by_user_id=current_user.id if current_user else None
+        created_by_user_id=current_user.id
     )
     
     db.add(invite)
@@ -59,7 +59,7 @@ def create_invite(
     log_activity(
         db, invite_data.customer_id, "invite_created",
         {"expires_days": invite_data.expires_days},
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         auto_commit=True
     )
 
@@ -208,6 +208,7 @@ def submit_invite_form(
 @router.get("/customer/{customer_id}", response_model=list)
 def get_customer_invites(
     customer_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -238,6 +239,7 @@ def get_customer_invites(
 @router.delete("/{invite_id}")
 def deactivate_invite(
     invite_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """

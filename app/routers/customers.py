@@ -24,7 +24,7 @@ from app.schemas import (
     DuplicateCheckResponse,
 )
 from app.services.auth_service import (
-    get_current_user, get_current_user_optional, check_customer_access
+    get_current_user, check_customer_access
 )
 from app.services.activity_service import log_activity
 
@@ -42,7 +42,7 @@ def base_customer_query(db: Session):
 def check_duplicate(
     name: str = Query(..., min_length=1, description="客户姓名"),
     exclude_id: Optional[int] = Query(None, description="排除的客户ID（编辑时用）"),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """检测客户姓名是否重复"""
@@ -64,14 +64,14 @@ def check_duplicate(
 def get_recycle_bin(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取回收站列表（已软删除的客户）"""
     query = db.query(Customer).filter(Customer.is_deleted == 1)
 
     # 权限过滤
-    if current_user and not current_user.is_admin:
+    if not current_user.is_admin:
         query = query.filter(
             or_(
                 Customer.owner_user_id == current_user.id,
@@ -96,7 +96,7 @@ def get_recycle_bin(
 @router.put("/batch/status", response_model=BatchOperationResponse)
 def batch_update_status(
     data: BatchStatusUpdate,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """批量修改客户状态"""
@@ -107,7 +107,7 @@ def batch_update_status(
     # 权限过滤
     accessible = []
     for c in customers:
-        if not current_user or check_customer_access(c.owner_user_id, current_user):
+        if check_customer_access(c.owner_user_id, current_user):
             accessible.append(c)
 
     for c in accessible:
@@ -116,7 +116,7 @@ def batch_update_status(
         log_activity(
             db, c.id, "status_changed",
             {"from_status": old_status, "to_status": data.status.value},
-            user_id=current_user.id if current_user else None
+            user_id=current_user.id
         )
 
     db.commit()
@@ -130,7 +130,7 @@ def batch_update_status(
 @router.post("/batch/delete", response_model=BatchOperationResponse)
 def batch_delete(
     data: BatchDeleteRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """批量软删除客户"""
@@ -140,7 +140,7 @@ def batch_delete(
 
     accessible = []
     for c in customers:
-        if not current_user or check_customer_access(c.owner_user_id, current_user):
+        if check_customer_access(c.owner_user_id, current_user):
             accessible.append(c)
 
     now = datetime.now()
@@ -150,7 +150,7 @@ def batch_delete(
         log_activity(
             db, c.id, "customer_deleted",
             {"name": c.name},
-            user_id=current_user.id if current_user else None
+            user_id=current_user.id
         )
 
     db.commit()
@@ -164,7 +164,7 @@ def batch_delete(
 @router.post("/batch/restore", response_model=BatchOperationResponse)
 def batch_restore(
     data: BatchRestoreRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """批量恢复已删除客户"""
@@ -175,7 +175,7 @@ def batch_restore(
 
     accessible = []
     for c in customers:
-        if not current_user or check_customer_access(c.owner_user_id, current_user):
+        if check_customer_access(c.owner_user_id, current_user):
             accessible.append(c)
 
     for c in accessible:
@@ -184,7 +184,7 @@ def batch_restore(
         log_activity(
             db, c.id, "customer_restored",
             {"name": c.name},
-            user_id=current_user.id if current_user else None
+            user_id=current_user.id
         )
 
     db.commit()
@@ -209,7 +209,7 @@ def get_customers(
     page_size: int = Query(20, ge=1, le=999, description="每页条数"),
     skip: int = Query(None, ge=0, description="跳过条数（兼容旧参数）"),
     limit: int = Query(None, ge=1, le=999, description="返回条数（兼容旧参数）"),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -218,12 +218,11 @@ def get_customers(
     权限规则：
     - 管理员：可查看所有客户
     - 普通用户：只能查看自己的客户 + owner_user_id 为空的客户
-    - 未登录：可查看所有客户（兼容旧版本）
     """
     query = base_customer_query(db)
 
     # 权限过滤
-    if current_user and not current_user.is_admin:
+    if not current_user.is_admin:
         query = query.filter(
             or_(
                 Customer.owner_user_id == current_user.id,
@@ -297,7 +296,7 @@ def get_customers(
 @router.post("", response_model=CustomerResponse)
 def create_customer(
     customer_data: CustomerCreate,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -305,17 +304,14 @@ def create_customer(
 
     - 管理员可以指定归属用户
     - 普通用户自动归属到自己
-    - 未登录时不设置归属
     """
     # 确定归属用户
-    owner_id = None
-    if current_user:
-        if current_user.is_admin and customer_data.owner_user_id is not None:
-            # 管理员可以指定归属
-            owner_id = customer_data.owner_user_id if customer_data.owner_user_id > 0 else None
-        else:
-            # 普通用户归属到自己
-            owner_id = current_user.id
+    if current_user.is_admin and customer_data.owner_user_id is not None:
+        # 管理员可以指定归属
+        owner_id = customer_data.owner_user_id if customer_data.owner_user_id > 0 else None
+    else:
+        # 普通用户归属到自己
+        owner_id = current_user.id
 
     customer = Customer(
         name=customer_data.name,
@@ -334,7 +330,7 @@ def create_customer(
     log_activity(
         db, customer.id, "customer_created",
         {"name": customer.name},
-        user_id=current_user.id if current_user else None,
+        user_id=current_user.id,
         auto_commit=True
     )
 
@@ -344,7 +340,7 @@ def create_customer(
 @router.get("/{customer_id}", response_model=CustomerResponse)
 def get_customer(
     customer_id: int,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取客户详情"""
@@ -354,7 +350,7 @@ def get_customer(
         raise HTTPException(status_code=404, detail="客户不存在")
 
     # 权限检查
-    if current_user and not check_customer_access(customer.owner_user_id, current_user):
+    if not check_customer_access(customer.owner_user_id, current_user):
         raise HTTPException(status_code=403, detail="无权访问此客户")
 
     return CustomerResponse.model_validate(customer)
@@ -364,7 +360,7 @@ def get_customer(
 def update_customer(
     customer_id: int,
     customer_data: CustomerUpdate,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """更新客户信息"""
@@ -374,7 +370,7 @@ def update_customer(
         raise HTTPException(status_code=404, detail="客户不存在")
 
     # 权限检查
-    if current_user and not check_customer_access(customer.owner_user_id, current_user):
+    if not check_customer_access(customer.owner_user_id, current_user):
         raise HTTPException(status_code=403, detail="无权修改此客户")
 
     # 更新非空字段
@@ -385,7 +381,7 @@ def update_customer(
 
     # owner_user_id 只允许管理员修改
     if 'owner_user_id' in update_data:
-        if not current_user or not current_user.is_admin:
+        if not current_user.is_admin:
             del update_data['owner_user_id']
         elif update_data['owner_user_id'] == 0:
             update_data['owner_user_id'] = None
@@ -400,7 +396,7 @@ def update_customer(
     log_activity(
         db, customer_id, "customer_updated",
         {"updated_fields": list(update_data.keys())},
-        user_id=current_user.id if current_user else None
+        user_id=current_user.id
     )
     # 如果跟进日期变化，额外记录
     new_follow_up = str(customer.next_follow_up) if customer.next_follow_up else None
@@ -408,7 +404,7 @@ def update_customer(
         log_activity(
             db, customer_id, "follow_up_changed",
             {"new_date": new_follow_up},
-            user_id=current_user.id if current_user else None
+            user_id=current_user.id
         )
     db.commit()
 
@@ -419,7 +415,7 @@ def update_customer(
 def update_customer_status(
     customer_id: int,
     status_data: CustomerStatusUpdate,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """更新客户状态"""
@@ -429,7 +425,7 @@ def update_customer_status(
         raise HTTPException(status_code=404, detail="客户不存在")
 
     # 权限检查
-    if current_user and not check_customer_access(customer.owner_user_id, current_user):
+    if not check_customer_access(customer.owner_user_id, current_user):
         raise HTTPException(status_code=403, detail="无权修改此客户")
 
     old_status = customer.status
@@ -437,7 +433,7 @@ def update_customer_status(
     log_activity(
         db, customer_id, "status_changed",
         {"from_status": old_status, "to_status": status_data.status.value},
-        user_id=current_user.id if current_user else None
+        user_id=current_user.id
     )
     db.commit()
     db.refresh(customer)
@@ -449,7 +445,7 @@ def update_customer_status(
 def update_customer_birthday(
     customer_id: int,
     birthday_data: CustomerBirthdayUpdate,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -462,14 +458,14 @@ def update_customer_birthday(
         raise HTTPException(status_code=404, detail="客户不存在")
 
     # 权限检查
-    if current_user and not check_customer_access(customer.owner_user_id, current_user):
+    if not check_customer_access(customer.owner_user_id, current_user):
         raise HTTPException(status_code=403, detail="无权修改此客户")
 
     customer.birthday = birthday_data.birthday
     log_activity(
         db, customer_id, "birthday_updated",
         {"new_date": str(birthday_data.birthday) if birthday_data.birthday else None},
-        user_id=current_user.id if current_user else None
+        user_id=current_user.id
     )
     db.commit()
     db.refresh(customer)
@@ -514,7 +510,7 @@ def update_customer_owner(
 @router.post("/{customer_id}/restore", response_model=CustomerResponse)
 def restore_customer(
     customer_id: int,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """恢复已删除的客户"""
@@ -527,7 +523,7 @@ def restore_customer(
         raise HTTPException(status_code=404, detail="客户不存在或未被删除")
 
     # 权限检查
-    if current_user and not check_customer_access(customer.owner_user_id, current_user):
+    if not check_customer_access(customer.owner_user_id, current_user):
         raise HTTPException(status_code=403, detail="无权操作此客户")
 
     customer.is_deleted = 0
@@ -535,7 +531,7 @@ def restore_customer(
     log_activity(
         db, customer_id, "customer_restored",
         {"name": customer.name},
-        user_id=current_user.id if current_user else None
+        user_id=current_user.id
     )
     db.commit()
     db.refresh(customer)
@@ -546,7 +542,7 @@ def restore_customer(
 @router.delete("/{customer_id}")
 def delete_customer(
     customer_id: int,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """软删除客户（移入回收站）"""
@@ -556,14 +552,14 @@ def delete_customer(
         raise HTTPException(status_code=404, detail="客户不存在")
 
     # 权限检查
-    if current_user and not check_customer_access(customer.owner_user_id, current_user):
+    if not check_customer_access(customer.owner_user_id, current_user):
         raise HTTPException(status_code=403, detail="无权删除此客户")
 
     # 记录删除日志
     log_activity(
         db, customer_id, "customer_deleted",
         {"name": customer.name},
-        user_id=current_user.id if current_user else None
+        user_id=current_user.id
     )
 
     # 软删除

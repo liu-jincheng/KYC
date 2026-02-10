@@ -86,12 +86,11 @@
 
 <!-- 状态分布 -->
 {% set safe_total = stats.total if stats.total else 1 %}
-{% set pending_width = (stats.pending / safe_total * 100) | round(0, 'floor') %}
-{% set analyzing_width = (stats.analyzing / safe_total * 100) | round(0, 'floor') %}
-{% set reported_width = (stats.reported / safe_total * 100) | round(0, 'floor') %}
-{% set following_width = (stats.following / safe_total * 100) | round(0, 'floor') %}
-{% set signed_width_raw = 100 - pending_width - analyzing_width - reported_width - following_width %}
-{% set signed_width = 0 if signed_width_raw < 0 else signed_width_raw %}
+{% set pending_width = (stats.pending / safe_total * 100) | round(2) %}
+{% set analyzing_width = (stats.analyzing / safe_total * 100) | round(2) %}
+{% set reported_width = (stats.reported / safe_total * 100) | round(2) %}
+{% set following_width = (stats.following / safe_total * 100) | round(2) %}
+{% set signed_width = (stats.signed / safe_total * 100) | round(2) %}
 <div class="row mb-4">
     <div class="col-12">
         <div class="card">

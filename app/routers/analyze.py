@@ -11,7 +11,7 @@ from app.database import get_db
 from app.models import Customer, CustomerStatus, User
 from app.schemas import AnalyzeResponse
 from app.services.coze_service import analyze_customer_kyc, analyze_customer_kyc_stream
-from app.services.auth_service import get_current_user_optional
+from app.services.auth_service import get_current_user
 from app.services.activity_service import log_activity
 
 router = APIRouter()
@@ -20,7 +20,7 @@ router = APIRouter()
 @router.post("/{customer_id}", response_model=AnalyzeResponse)
 async def analyze_customer(
     customer_id: int,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -44,7 +44,7 @@ async def analyze_customer(
     customer.status = CustomerStatus.ANALYZING.value
     log_activity(
         db, customer_id, "ai_analysis_triggered",
-        user_id=current_user.id if current_user else None
+        user_id=current_user.id
     )
     db.commit()
 
@@ -61,7 +61,7 @@ async def analyze_customer(
         customer.status = CustomerStatus.REPORTED.value
         log_activity(
             db, customer_id, "ai_analysis_completed",
-            user_id=current_user.id if current_user else None
+            user_id=current_user.id
         )
         db.commit()
         db.refresh(customer)
@@ -80,7 +80,7 @@ async def analyze_customer(
         log_activity(
             db, customer_id, "ai_analysis_failed",
             {"error": str(e)},
-            user_id=current_user.id if current_user else None
+            user_id=current_user.id
         )
         db.commit()
 
@@ -93,7 +93,7 @@ async def analyze_customer(
 @router.post("/{customer_id}/stream")
 async def analyze_customer_stream(
     customer_id: int,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -112,7 +112,7 @@ async def analyze_customer_stream(
     
     # 更新状态为分析中
     customer.status = CustomerStatus.ANALYZING.value
-    user_id = current_user.id if current_user else None
+    user_id = current_user.id
     log_activity(
         db, customer_id, "ai_analysis_triggered",
         user_id=user_id

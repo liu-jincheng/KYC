@@ -11,7 +11,7 @@ from typing import Optional
 
 from app.database import get_db
 from app.models import Customer, FormTemplate, User
-from app.services.auth_service import get_current_user_optional
+from app.services.auth_service import get_current_user
 
 router = APIRouter()
 
@@ -20,7 +20,7 @@ router = APIRouter()
 def export_customers_csv(
     fields: str = Query("basic", description="导出字段: basic,kyc,ai_report"),
     status: Optional[str] = Query(None, description="按状态筛选"),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -37,7 +37,7 @@ def export_customers_csv(
     query = db.query(Customer).filter(Customer.is_deleted == 0)
 
     # 权限过滤
-    if current_user and not current_user.is_admin:
+    if not current_user.is_admin:
         query = query.filter(
             or_(
                 Customer.owner_user_id == current_user.id,
