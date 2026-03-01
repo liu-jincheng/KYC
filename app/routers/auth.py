@@ -1,6 +1,8 @@
 """
 认证 API 路由
 """
+import time
+from collections import defaultdict
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from sqlalchemy.orm import Session
 
@@ -18,9 +20,63 @@ from app.services.auth_service import (
 router = APIRouter()
 
 
+# ============ 登录频率限制 ============
+
+class LoginRateLimiter:
+    """
+    基于内存的登录频率限制器
+
+    规则：同一 IP 在 window 秒内最多尝试 max_attempts 次。
+    超出后返回冷却剩余秒数，需等待后才能继续登录。
+    """
+
+    def __init__(self, max_attempts: int = 5, window: int = 300):
+        self.max_attempts = max_attempts  # 允许的最大尝试次数
+        self.window = window              # 时间窗口（秒）
+        # {ip: [timestamp, timestamp, ...]}
+        self._attempts: dict[str, list[float]] = defaultdict(list)
+
+    def _cleanup(self, ip: str) -> None:
+        """清除过期的尝试记录"""
+        now = time.time()
+        self._attempts[ip] = [
+            t for t in self._attempts[ip] if now - t < self.window
+        ]
+        if not self._attempts[ip]:
+            self._attempts.pop(ip, None)
+
+    def check(self, ip: str) -> int:
+        """
+        检查是否允许登录
+
+        Returns:
+            0 — 允许登录
+            >0 — 需等待的秒数
+        """
+        self._cleanup(ip)
+        if len(self._attempts.get(ip, [])) >= self.max_attempts:
+            oldest = self._attempts[ip][0]
+            wait = int(self.window - (time.time() - oldest)) + 1
+            return max(wait, 1)
+        return 0
+
+    def record_failure(self, ip: str) -> None:
+        """记录一次失败尝试"""
+        self._attempts[ip].append(time.time())
+
+    def reset(self, ip: str) -> None:
+        """登录成功后清除该 IP 的失败记录"""
+        self._attempts.pop(ip, None)
+
+
+# 5 分钟窗口内最多 5 次失败尝试
+_login_limiter = LoginRateLimiter(max_attempts=5, window=300)
+
+
 @router.post("/login", response_model=LoginResponse)
 def login(
     login_data: LoginRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db)
 ):
@@ -28,19 +84,36 @@ def login(
     用户登录
     
     成功后设置 session cookie
+    - 同一 IP 在 5 分钟内最多允许 5 次失败尝试
     """
+    client_ip = request.client.host if request.client else "unknown"
+
+    # 频率限制检查
+    wait_seconds = _login_limiter.check(client_ip)
+    if wait_seconds > 0:
+        return LoginResponse(
+            success=False,
+            message=f"登录尝试过于频繁，请 {wait_seconds} 秒后再试"
+        )
+
     # 查找用户
     user = db.query(User).filter(User.username == login_data.username).first()
     
     if not user:
+        _login_limiter.record_failure(client_ip)
         return LoginResponse(success=False, message="用户名或密码错误")
     
     if not user.is_active:
+        _login_limiter.record_failure(client_ip)
         return LoginResponse(success=False, message="账户已被禁用")
     
     if not user.verify_password(login_data.password):
+        _login_limiter.record_failure(client_ip)
         return LoginResponse(success=False, message="用户名或密码错误")
     
+    # 登录成功，清除失败记录
+    _login_limiter.reset(client_ip)
+
     # 创建会话令牌并设置 cookie
     session_token = create_session_token(user.id)
     response.set_cookie(

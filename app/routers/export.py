@@ -3,6 +3,7 @@
 """
 import csv
 import io
+from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -125,10 +126,14 @@ def export_customers_csv(
             output.seek(0)
             output.truncate(0)
 
+    # 生成带时间戳的文件名
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"customers_export_{timestamp}.csv"
+
     return StreamingResponse(
         generate(),
         media_type="text/csv",
         headers={
-            "Content-Disposition": "attachment; filename=customers_export.csv"
+            "Content-Disposition": f"attachment; filename={filename}"
         }
     )

@@ -412,13 +412,34 @@ function showToast(message, type = 'error') {
     messageToast.show();
 }
 
-// ============ 搜索（输入即搜，带防抖） ============
+// ============ 搜索（输入即搜，带防抖，兼容中文输入法） ============
 const searchInput = document.getElementById('customerSearch');
 const searchForm = document.getElementById('searchForm');
 const searchClearBtn = document.getElementById('searchClearBtn');
 let searchTimer = null;
+let isComposing = false;   // 标记是否处于输入法组合输入中
+
+// 输入法开始组合（如拼音输入中）
+searchInput.addEventListener('compositionstart', function() {
+    isComposing = true;
+    clearTimeout(searchTimer);
+});
+
+// 输入法组合结束（用户已选词/确认）
+searchInput.addEventListener('compositionend', function() {
+    isComposing = false;
+    // 选词完成后触发一次搜索
+    const val = this.value.trim();
+    searchClearBtn.style.display = val ? '' : 'none';
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+        searchForm.submit();
+    }, 400);
+});
 
 searchInput.addEventListener('input', function() {
+    // 组合输入期间不触发搜索，等选词完成再搜
+    if (isComposing) return;
     const val = this.value.trim();
     // 显示/隐藏清除按钮
     searchClearBtn.style.display = val ? '' : 'none';

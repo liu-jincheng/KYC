@@ -63,4 +63,4 @@ def get_reminders(
     - 生日提醒: 仅当 birthday 字段非空时计算(7天内生日)
     - 状态滞留: 状态为"AI分析中"超过3天的客户
     """
-    return get_all_reminders(db)
+    return get_all_reminders(db, current_user=current_user)

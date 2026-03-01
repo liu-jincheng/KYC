@@ -479,6 +479,9 @@ main {
 
 .quick-action:hover {
     transform: translateY(-1px);
+    background: linear-gradient(135deg, #eef2ff, #e8edff) !important;
+    color: #1f2a44 !important;
+    border-color: var(--brand-primary) !important;
 }
 
 /* 空状态 */

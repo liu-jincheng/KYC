@@ -2,16 +2,34 @@
 提醒引擎服务
 """
 from datetime import date, datetime, timedelta
+from typing import Optional
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 
-from app.models import Customer, CustomerStatus
+from app.models import Customer, CustomerStatus, User
 from app.schemas import DashboardReminders, ReminderItem
 
 
-def get_all_reminders(db: Session) -> DashboardReminders:
+def _apply_owner_filter(query, current_user: Optional[User]):
     """
-    获取所有待办提醒
+    对查询应用客户归属权限过滤
+
+    - 管理员 / 未传入用户: 不过滤
+    - 普通用户: 只看自己的客户 + owner_user_id 为空的公共客户
+    """
+    if current_user is None or current_user.is_admin:
+        return query
+    return query.filter(
+        or_(
+            Customer.owner_user_id == current_user.id,
+            Customer.owner_user_id.is_(None)
+        )
+    )
+
+
+def get_all_reminders(db: Session, current_user: Optional[User] = None) -> DashboardReminders:
+    """
+    获取所有待办提醒（按用户权限过滤）
     
     - 跟进提醒: next_follow_up <= today 的客户
     - 生日提醒: 仅当 birthday 字段非空时计算(7天内生日)
@@ -19,9 +37,9 @@ def get_all_reminders(db: Session) -> DashboardReminders:
     """
     today = date.today()
     
-    follow_ups = _get_follow_up_reminders(db, today)
-    birthdays = _get_birthday_reminders(db, today)
-    stale_analyses = _get_stale_analysis_reminders(db, today)
+    follow_ups = _get_follow_up_reminders(db, today, current_user)
+    birthdays = _get_birthday_reminders(db, today, current_user)
+    stale_analyses = _get_stale_analysis_reminders(db, today, current_user)
     
     return DashboardReminders(
         follow_ups=follow_ups,
@@ -30,19 +48,21 @@ def get_all_reminders(db: Session) -> DashboardReminders:
     )
 
 
-def _get_follow_up_reminders(db: Session, today: date) -> list[ReminderItem]:
+def _get_follow_up_reminders(db: Session, today: date, current_user: Optional[User] = None) -> list[ReminderItem]:
     """获取跟进提醒"""
     reminders = []
     
     # 查询 next_follow_up <= today 的客户
-    customers = db.query(Customer).filter(
+    query = db.query(Customer).filter(
         and_(
             Customer.is_deleted == 0,
             Customer.next_follow_up != None,
             Customer.next_follow_up <= today,
             Customer.status != CustomerStatus.SIGNED.value  # 已签约的不需要提醒
         )
-    ).all()
+    )
+    query = _apply_owner_filter(query, current_user)
+    customers = query.all()
     
     for customer in customers:
         days_overdue = (today - customer.next_follow_up).days
@@ -65,7 +85,7 @@ def _get_follow_up_reminders(db: Session, today: date) -> list[ReminderItem]:
     return reminders
 
 
-def _get_birthday_reminders(db: Session, today: date) -> list[ReminderItem]:
+def _get_birthday_reminders(db: Session, today: date, current_user: Optional[User] = None) -> list[ReminderItem]:
     """
     获取生日提醒
     仅当 birthday 字段非空时才计算
@@ -74,12 +94,14 @@ def _get_birthday_reminders(db: Session, today: date) -> list[ReminderItem]:
     reminders = []
     
     # 只查询有生日数据的客户
-    customers = db.query(Customer).filter(
+    query = db.query(Customer).filter(
         and_(
             Customer.is_deleted == 0,
             Customer.birthday != None
         )
-    ).all()
+    )
+    query = _apply_owner_filter(query, current_user)
+    customers = query.all()
     
     for customer in customers:
         # 计算今年的生日日期
@@ -112,7 +134,7 @@ def _get_birthday_reminders(db: Session, today: date) -> list[ReminderItem]:
     return reminders
 
 
-def _get_stale_analysis_reminders(db: Session, today: date) -> list[ReminderItem]:
+def _get_stale_analysis_reminders(db: Session, today: date, current_user: Optional[User] = None) -> list[ReminderItem]:
     """
     获取状态滞留提醒
     状态为"AI分析中"超过3天的客户
@@ -122,13 +144,15 @@ def _get_stale_analysis_reminders(db: Session, today: date) -> list[ReminderItem
     three_days_ago = datetime.now() - timedelta(days=3)
     
     # 查询状态为"AI分析中"且更新时间超过3天的客户
-    customers = db.query(Customer).filter(
+    query = db.query(Customer).filter(
         and_(
             Customer.is_deleted == 0,
             Customer.status == CustomerStatus.ANALYZING.value,
             Customer.updated_at < three_days_ago
         )
-    ).all()
+    )
+    query = _apply_owner_filter(query, current_user)
+    customers = query.all()
     
     for customer in customers:
         if customer.updated_at:
