@@ -4,6 +4,16 @@ set -e
 SERVER="root@115.190.197.29"
 REMOTE_DIR="/srv/kyc/KYC"
 
+# ========== 发布前自动备份 ==========
+echo "🔐 发布前备份数据库..."
+ssh ${SERVER} "
+  if [ -f ${REMOTE_DIR}/data/crm.db ]; then
+    APP_DIR=${REMOTE_DIR} bash ${REMOTE_DIR}/scripts/backup_db.sh
+  else
+    echo '⚠️ 远程数据库不存在（首次部署），跳过备份'
+  fi
+"
+
 echo "📦 同步项目文件到服务器..."
 rsync -avz --delete \
   --exclude '.git' \
@@ -11,6 +21,8 @@ rsync -avz --delete \
   --exclude '*.pyc' \
   --exclude 'venv' \
   --exclude '.cursor' \
+  --exclude 'data/' \
+  --exclude 'backups/' \
   /Users/kim6/Projects/KYC/ \
   ${SERVER}:${REMOTE_DIR}/
 
@@ -29,9 +41,11 @@ ssh ${SERVER} << 'EOF'
     pkill -f "uvicorn app.main:app" || true
     nohup venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 > /tmp/kyc.log 2>&1 &
   fi
-ssh root@115.190.197.29 "cat /etc/systemd/system/kyc.service"
+
   sleep 2
   echo "✅ 部署完成"
 EOF
 
 echo "🌐 访问 http://115.190.197.29 验证"
+echo ""
+echo "💡 如需回滚数据库: ssh ${SERVER} 'APP_DIR=${REMOTE_DIR} ${REMOTE_DIR}/scripts/restore_db.sh --latest'"

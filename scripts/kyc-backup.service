@@ -1,0 +1,9 @@
+[Unit]
+Description=KYC SQLite Database Backup
+After=network.target
+
+[Service]
+Type=oneshot
+Environment=APP_DIR=/srv/kyc/KYC
+ExecStart=/srv/kyc/KYC/scripts/backup_db.sh
+User=root

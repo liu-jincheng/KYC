@@ -158,8 +158,12 @@ KYC/
 ## 🔐 数据安全
 
 - 所有客户数据存储在本地 `data/crm.db` 文件中
-- 建议定期备份数据库文件
+- **自动定时备份**：每 12 小时自动备份，压缩存储于 `backups/` 目录，滚动保留 30 天
+- **一键恢复**：`scripts/restore_db.sh` 支持交互/指定/最新备份恢复，含完整性校验与回滚保护
+- **异地副本**：`scripts/offsite_sync.sh` 支持将备份拉取到本地或推送到远端
+- **发布保护**：`update_server.sh` 在每次部署前自动执行数据库备份
 - AI 分析时仅传输必要的业务数据，不包含敏感个人信息
+- 详细备份恢复指南见 [`docs/backup_recovery.md`](docs/backup_recovery.md)
 
 ## 📄 License
 
